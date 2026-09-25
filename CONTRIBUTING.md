@@ -60,9 +60,13 @@ add a `Release-As: 1.0.0` footer to a commit.
   settings. Optionally require approval there.
 - **Actions permissions:** in Settings → Actions → General, allow GitHub
   Actions to create pull requests.
-- **CI on release PRs:** PRs opened with the default `GITHUB_TOKEN` don't
-  trigger other workflows. To run CI on release PRs, give release-please a
-  fine-grained PAT as `token:`.
+- **CI on release PRs:** a PR opened with the built-in `GITHUB_TOKEN` waits
+  for a maintainer to approve its CI run ("action required"). The release
+  workflow uses the `RELEASE_PLEASE_TOKEN` secret instead when it exists: a
+  fine-grained personal access token for this repo only, with **Contents**
+  and **Pull requests** read/write. Release PRs are then opened under your
+  name and CI runs on them by itself. Renew the token before it expires; if
+  it lapses, release-please fails until you replace it or delete the secret.
 
 ### Homebrew
 
