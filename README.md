@@ -133,6 +133,7 @@ Or copy `skills/corral` into your agent's skills directory.
 uv sync
 uv run pytest
 uv run ruff check . && uv run ruff format --check .
+uv run ty check
 ```
 
 Tests run against an in-memory fake herdr (`tests/fake_herdr.py`); nothing
