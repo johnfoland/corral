@@ -44,7 +44,7 @@ version and changelog are generated from them:
 - `feat: …` → minor bump
 - `fix: …` → patch bump
 - `feat!: …` or a `BREAKING CHANGE:` footer → major bump (minor while < 1.0)
-- `docs:`, `refactor:`, `test:`, `ci:`, `chore:` → no release on their own
+- `docs:`, `refactor:`, `test:`, `ci:`, `build:`, `chore:` → no release on their own, and not listed in the changelog
 
 Pull request titles are checked for this format in CI.
 
