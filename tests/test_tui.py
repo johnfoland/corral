@@ -80,3 +80,15 @@ async def test_filter_keeps_ancestors(herdr, cfg):
         await pilot.press("escape")
         await pilot.pause(0.2)
         assert "courses" in rows(app)
+
+
+async def test_workers_outliving_the_widgets_do_not_crash(herdr, cfg):
+    """A refresh or details worker that runs while the app tears down its
+    widgets (quit mid-refresh) must return quietly, not raise NoMatches."""
+    app = CorralApp(cfg, herdr)
+    async with app.run_test(size=(150, 40)) as pilot:
+        await settle(pilot, app)
+        await app.query_one("#main").remove()
+        app.update_details()
+        app.action_refresh()
+        await settle(pilot, app)

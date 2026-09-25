@@ -8,6 +8,7 @@ code the CLI runs), in a worker thread, with progress streamed to the log.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -17,6 +18,7 @@ from textual import on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.css.query import NoMatches
 from textual.screen import ModalScreen
 from textual.widgets import (
     DataTable,
@@ -314,16 +316,17 @@ class CorralApp(App):
                 if ws:
                     state[rel] = NodeState(ws, projects.agent_tabs(snap, ws.id, self.cfg))
         self.state = state
-        banner = self.query_one("#error", Static)
-        banner.update(error)
-        banner.set_class(bool(error), "visible")
         # Unfold down to each open workspace -- once, so a manual fold sticks.
         for rel in state:
             for a in tree.ancestors(rel):
                 if a not in self.auto_expanded:
                     self.auto_expanded.add(a)
                     self.expanded.add(a)
-        self.render_table()
+        with contextlib.suppress(NoMatches):  # the app quit while herdr was answering
+            banner = self.query_one("#error", Static)
+            banner.update(error)
+            banner.set_class(bool(error), "visible")
+            self.render_table()
 
     # tree
 
@@ -473,6 +476,10 @@ class CorralApp(App):
 
     @work(exclusive=True, group="details")
     async def update_details(self) -> None:
+        with contextlib.suppress(NoMatches):  # the app is tearing down its widgets
+            await self._update_details()
+
+    async def _update_details(self) -> None:
         details = self.query_one("#details", Static)
         p = self.current()
         if not p:
