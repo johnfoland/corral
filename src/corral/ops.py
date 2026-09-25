@@ -412,7 +412,7 @@ def tab(
     snap = h.snapshot()
     if not snap.workspace(ws):
         raise ConfigError(f"no workspace {ws}")
-    cwd = str(Path(cwd).expanduser()) if cwd else (workspace_cwd(snap, ws) or os.getcwd())
+    cwd = str(Path(cwd).expanduser()) if cwd else (workspace_cwd(snap, ws) or str(Path.cwd()))
     out = []
     for s in specs:
         out.append(

@@ -51,7 +51,8 @@ args = "-m gpt-5.6-luna -c model_reasoning_effort={effort}"
     monkeypatch.delenv("CORRAL_ROOT", raising=False)
     cfg = config.load(f)
     assert cfg.root == Path("/from/file")
-    assert "third_party" in cfg.prune and "node_modules" in cfg.prune
+    assert "third_party" in cfg.prune
+    assert "node_modules" in cfg.prune
     assert cfg.model("luna").args_for("high")[-1] == "model_reasoning_effort=high"
     assert cfg.efforts_for("gemini") == ["low", "high"]
     assert cfg.efforts_for("claude")[-1] == "max"  # defaults kept
@@ -62,7 +63,7 @@ args = "-m gpt-5.6-luna -c model_reasoning_effort={effort}"
 
 
 @pytest.mark.parametrize(
-    "body, msg",
+    ("body", "msg"),
     [
         ('[[models]]\nkey="a"\ntool="claude"\n', "display is required"),
         (

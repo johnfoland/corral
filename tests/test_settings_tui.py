@@ -4,7 +4,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
-from textual.widgets import DataTable, Input, Switch, TabbedContent
+from textual.widgets import DataTable, Input, OptionList, Switch, TabbedContent
 
 from corral import config, ops
 from corral.tui.app import AgentPicker, Confirm, CorralApp
@@ -63,10 +63,12 @@ async def test_save_applies_root_and_utility(app, cfg_path, tmp_path):
         await pilot.press("ctrl+s")
         await settle(pilot, app)
         assert not isinstance(app.screen, SettingsScreen)
-        assert app.cfg.root == other and app.cfg.utility.top == "htop"
+        assert app.cfg.root == other
+        assert app.cfg.utility.top == "htop"
         assert list(app.ptree.nodes) == ["alpha"]  # re-scanned the new root
     data = saved(cfg_path)
-    assert data["root"] == str(other) and data["utility"]["top"] == "htop"
+    assert data["root"] == str(other)
+    assert data["utility"]["top"] == "htop"
     assert cfg_path.read_text().startswith("# mine\n")
 
 
@@ -82,7 +84,7 @@ async def test_add_remove_and_reorder_default_agents(app, cfg_path):
         assert s.default_agents == ["sonnet/medium", "opus/high"]
         await pilot.click("#agent-up")  # the new one is highlighted
         assert s.default_agents == ["opus/high", "sonnet/medium"]
-        s.query_one("#default-agents").highlighted = 1
+        s.query_one("#default-agents", OptionList).highlighted = 1
         await pilot.click("#agent-remove")
         await pilot.press("ctrl+s")
         await settle(pilot, app)
@@ -226,8 +228,10 @@ async def test_main_screen_keys_do_nothing_on_other_screens(app, herdr, root):
         s.query_one("#browse").focus()
         await pilot.press("x", "o", "a", "q")
         await pilot.pause(0.3)
-        assert app.screen is s and app.is_running
-        assert ws in herdr.ws and len(herdr.ws) == 1
+        assert app.screen is s
+        assert app.is_running
+        assert ws in herdr.ws
+        assert len(herdr.ws) == 1
         await pilot.press("escape")
         await settle(pilot, app)
         app.move_to("courses")

@@ -33,6 +33,8 @@ async def test_tree_folds_and_open_builds_nested_workspace(herdr, cfg):
         await pilot.press("left")  # to the parent
         await pilot.press("left")  # fold it
         assert "cruzainet/api" not in rows(app)
+        await pilot.press("space")  # space toggles the fold
+        assert "cruzainet/api" in rows(app)
 
 
 async def test_add_agent_twice_suffixes(herdr, cfg):
@@ -59,7 +61,8 @@ async def test_close_asks_first(herdr, cfg):
         app.move_to("courses")
         await pilot.press("x")
         await pilot.pause(0.5)
-        assert isinstance(app.screen, Confirm) and "would close" in app.screen.body
+        assert isinstance(app.screen, Confirm)
+        assert "would close" in app.screen.body
         await pilot.press("n")
         await settle(pilot, app)
         assert ws in herdr.ws
@@ -107,5 +110,6 @@ async def test_main_screen_keys_do_nothing_behind_a_dialog(herdr, cfg):
         assert isinstance(app.screen, AgentPicker)
         await pilot.press("x", "s", "q")
         await pilot.pause(0.3)
-        assert isinstance(app.screen, AgentPicker) and app.is_running
+        assert isinstance(app.screen, AgentPicker)
+        assert app.is_running
         assert ws in herdr.ws

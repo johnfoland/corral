@@ -8,8 +8,10 @@ def test_scan_finds_nested_repos_and_leading_folders(cfg):
     assert tree.tops == ["Archive", "courses", "cruzainet", "cSolveWordle", "MCPs", "scratch"]
     n = tree.nodes
     assert n["cruzainet"].children == ["cruzainet/api", "cruzainet/web-app"]
-    assert n["cruzainet"].repos_below == 2 and n["cruzainet"].branch == "master"
-    assert n["cruzainet/api"].branch == "develop" and n["cruzainet/api"].depth == 1
+    assert n["cruzainet"].repos_below == 2
+    assert n["cruzainet"].branch == "master"
+    assert n["cruzainet/api"].branch == "develop"
+    assert n["cruzainet/api"].depth == 1
     assert n["Archive"].is_repo is False
     assert n["Archive/AyeAI"].children == ["Archive/AyeAI/ayeai-api"]
     assert "cruzainet/notes" not in n  # not a repo, no repos below
@@ -34,9 +36,13 @@ def test_find_workspace_by_label_then_legacy_basename(herdr, root):
     api = root / "cruzainet" / "api"
     ws, _, _ = herdr.create_workspace(str(api.resolve()), "api")  # legacy basename label
     snap = herdr.snapshot()
-    assert projects.find_workspace(snap, "cruzainet/api", api).id == ws
+    found = projects.find_workspace(snap, "cruzainet/api", api)
+    assert found
+    assert found.id == ws
     assert projects.find_workspace(snap, "cruzainet/web-app", root / "cruzainet/web-app") is None
     # a basename match in a different directory is not the same project
     assert projects.find_workspace(snap, "other/api", Path("/nowhere/api")) is None
     ws2, _, _ = herdr.create_workspace(str(api), "cruzainet/api")
-    assert projects.find_workspace(herdr.snapshot(), "cruzainet/api", api).id == ws2
+    found = projects.find_workspace(herdr.snapshot(), "cruzainet/api", api)
+    assert found
+    assert found.id == ws2

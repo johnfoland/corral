@@ -103,3 +103,13 @@ changelog. (Before this, a README-only change became release 0.1.1.)
 Ideas, follow-ups and planned work are issues on the repo, not files. Agents
 file ideas as issues on their own (label `idea`), keeping them free of
 private details since the repo is public. See AGENTS.md.
+
+## Checks: ruff and ty, gated merges (2026-09)
+
+ruff lints and formats (rule sets E, F, W, I, UP, B, SIM, RUF, PT, C4, PERF,
+PTH; not pylint's PL rules, which are mostly noise here). ty type-checks
+`src` and `tests`: from the makers of ruff, chosen over pyright and mypy,
+and pinned to an exact version while it is pre-1.0 so an upgrade can't
+break CI unannounced. `master` requires the aggregate **CI passed** check
+(lint, the test matrix and a packaging check) and a Conventional Commit PR
+title.

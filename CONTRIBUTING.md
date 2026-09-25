@@ -6,6 +6,7 @@
 uv sync
 uv run pytest
 uv run ruff check . && uv run ruff format --check .
+uv run ty check               # types (ty is pinned: it's pre-1.0)
 uv run corral --help          # the dev install
 ```
 
@@ -34,7 +35,12 @@ look there before starting something, and open one for anything you won't
 finish now. Settled design questions are in [docs/decisions.md](docs/decisions.md).
 Coding agents also follow [AGENTS.md](AGENTS.md).
 
-Work on a branch and open a pull request; `master` only takes merges.
+Work on a branch and open a pull request; `master` only takes merges, and
+only once the **CI passed** check is green. That check needs lint (ruff and
+ty), the tests on Linux and macOS with Python 3.11 to 3.13, and a packaging
+check that installs the built wheel and sdist and runs `corral`. PR titles
+must be Conventional Commits. Dependabot opens grouped update PRs weekly
+(`ci(deps)`, `build(deps)`), which don't trigger a release on their own.
 
 ## Commits
 

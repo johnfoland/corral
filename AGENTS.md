@@ -43,7 +43,9 @@ The roadmap is the issue list on `johnfoland/corral`. Keep it current:
 - Don't edit versions or `CHANGELOG.md`; release-please owns them. Merging
   a release PR publishes to PyPI, so that is the maintainer's call.
 - Before pushing: `uv run pytest`, `uv run ruff check .`,
-  `uv run ruff format --check .`.
+  `uv run ruff format --check .`, `uv run ty check`. CI runs the same, plus
+  a packaging check, and `master` only merges once **CI passed** is green;
+  don't bypass it (no `gh pr merge --admin`).
 - Keep README.md, CONTRIBUTING.md, `skills/corral/SKILL.md` and the TUI's
   help text in step with any behaviour change, in the same PR.
 - Put behaviour in `ops.py`; the CLI and the TUI both call it.
