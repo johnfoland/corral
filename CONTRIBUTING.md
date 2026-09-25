@@ -43,7 +43,7 @@ Releases are automated with [release-please](https://github.com/googleapis/relea
 
 1. Merge conventional commits to `master`.
 2. release-please opens or updates a **release PR** that bumps the version
-   (in `pyproject.toml`, `src/corral/__init__.py` and
+   (in `pyproject.toml`, `uv.lock`, `src/corral/__init__.py` and
    `.claude-plugin/plugin.json`) and adds a section to `CHANGELOG.md`.
 3. Merging that PR tags `vX.Y.Z` and creates the GitHub release. The
    `publish` job then builds the package and uploads it to PyPI.

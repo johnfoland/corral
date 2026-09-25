@@ -20,7 +20,12 @@
       "package-name": "corral-herdr",
       "extra-files": [
         { "type": "generic", "path": "src/corral/__init__.py" },
-        { "type": "json", "path": ".claude-plugin/plugin.json", "jsonpath": "$.version" }
+        { "type": "json", "path": ".claude-plugin/plugin.json", "jsonpath": "$.version" },
+        {
+          "type": "toml",
+          "path": "uv.lock",
+          "jsonpath": "$.package[?(@.name.value=='corral-herdr')].version"
+        }
       ]
     }
   }
