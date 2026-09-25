@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/johnfoland/corral/compare/v0.2.0...v0.2.1) (2026-09-25)
+
+
+### Documentation
+
+* add agent instructions and a decision log ([#10](https://github.com/johnfoland/corral/issues/10)) ([bafaa77](https://github.com/johnfoland/corral/commit/bafaa775a81cebdfd1ce85e86e3bf635e4bd9838))
+
 ## [0.2.0](https://github.com/johnfoland/corral/compare/v0.1.1...v0.2.0) (2026-09-25)
 
 
