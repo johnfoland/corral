@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0](https://github.com/johnfoland/corral/compare/v0.1.1...v0.2.0) (2026-09-25)
+
+
+### Features
+
+* **tui:** settings screen for every config option ([b312330](https://github.com/johnfoland/corral/commit/b312330ed462a24fdb7876c1c0ad61becf665abb))
+
+
+### Bug Fixes
+
+* **tui:** keep the project list's keys from acting behind dialogs ([a9e9dfa](https://github.com/johnfoland/corral/commit/a9e9dfa56fbc6f0c4baf06a6c28a006375b123e1))
+
 ## [0.1.1](https://github.com/johnfoland/corral/compare/v0.1.0...v0.1.1) (2026-09-25)
 
 
