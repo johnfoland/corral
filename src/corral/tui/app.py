@@ -283,6 +283,17 @@ class CorralApp(App):
         self.set_interval(self.cfg.refresh_seconds, self.action_refresh)
         self.set_interval(RESCAN_SECONDS, self.action_rescan)
 
+    # App bindings apply on every screen, so without this, `x` pressed in a
+    # dialog would act on the project list behind it.
+    MAIN_SCREEN_ACTIONS = frozenset(
+        {"open", "add_agent", "fill", "utility", "stop", "force_fill", "close_ws", "filter",
+         "rescan", "clear_filter", "quit"}
+    )  # fmt: skip
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        # False: disabled, and hidden from the footer
+        return not (action in self.MAIN_SCREEN_ACTIONS and len(self.screen_stack) > 1)
+
     # data
 
     def node(self, rel: str) -> Project:

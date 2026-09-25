@@ -92,3 +92,20 @@ async def test_workers_outliving_the_widgets_do_not_crash(herdr, cfg):
         app.update_details()
         app.action_refresh()
         await settle(pilot, app)
+
+
+async def test_main_screen_keys_do_nothing_behind_a_dialog(herdr, cfg):
+    """App bindings apply on every screen: x/s/q in the agent picker must not
+    act on the project list (or quit)."""
+    ws = ops.up(herdr, cfg, cfg.root / "courses").workspace
+    app = CorralApp(cfg, herdr)
+    async with app.run_test(size=(150, 40)) as pilot:
+        await settle(pilot, app)
+        app.move_to("courses")
+        await pilot.press("a")
+        await pilot.pause(0.2)
+        assert isinstance(app.screen, AgentPicker)
+        await pilot.press("x", "s", "q")
+        await pilot.pause(0.3)
+        assert isinstance(app.screen, AgentPicker) and app.is_running
+        assert ws in herdr.ws
