@@ -66,6 +66,11 @@ add a `Release-As: 1.0.0` footer to a commit.
 
 ### Homebrew
 
-The formula lives in [johnfoland/homebrew-tap](https://github.com/johnfoland/homebrew-tap).
-After a PyPI release, update `url`/`sha256` to the new sdist, and refresh
-the dependency resources with `brew update-python-resources corral`.
+The formula is `Formula/corral-herdr.rb` in
+[johnfoland/homebrew-tap](https://github.com/johnfoland/homebrew-tap). After a
+PyPI release, update `url`/`sha256` to the new sdist and refresh the
+dependency resources with `brew update-python-resources corral-herdr`. That
+command ignores packages uploaded in the last 24 hours, so run it a day after
+the release, or copy the versions from `uv.lock`. Then check it with
+`brew audit --strict johnfoland/tap/corral-herdr`,
+`brew install --build-from-source johnfoland/tap/corral-herdr` and `brew test`.

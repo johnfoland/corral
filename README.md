@@ -26,10 +26,12 @@ Requires Python 3.11+ and herdr 0.8+.
 
 ```sh
 uv tool install corral-herdr    # or: pipx install corral-herdr
-brew install johnfoland/tap/corral
+brew install johnfoland/tap/corral-herdr
 ```
 
-The PyPI package is `corral-herdr`; the command it installs is `corral`.
+The package is `corral-herdr` on PyPI and in Homebrew; the command it installs
+is `corral`. (homebrew/core's `corral` is the Pony package manager, which also
+installs a `corral` command, so the two can't be installed together.)
 
 ## Use
 
