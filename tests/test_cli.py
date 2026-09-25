@@ -20,7 +20,8 @@ def run(monkeypatch, herdr, root, tmp_path):
 def test_up_json(run, root, capsys):
     assert run("up", str(root / "courses"), "--json", "--no-focus") == 0
     out = json.loads(capsys.readouterr().out)
-    assert out["action"] == "created" and out["label"] == "courses"
+    assert out["action"] == "created"
+    assert out["label"] == "courses"
     assert [t["action"] for t in out["tabs"]] == ["added", "added"]
 
 

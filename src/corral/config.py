@@ -326,7 +326,7 @@ def save(cfg: Config, path: Path) -> None:
     tmp = target.with_name(target.name + ".corral-tmp")
     try:
         tmp.write_text(tomlkit.dumps(doc), encoding="utf-8")
-        os.replace(tmp, target)
+        tmp.replace(target)
     except OSError as e:
         tmp.unlink(missing_ok=True)
         raise ConfigError(f"{path}: {e}") from e

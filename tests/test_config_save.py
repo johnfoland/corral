@@ -56,7 +56,8 @@ def test_edits_keep_comments_and_add_only_what_changed(cfg_file):
     assert 'top = "nnn"      # file manager' in text
     assert "scan_depth = 2" in text
     assert text.index("scan_depth") < text.index("[utility]")  # a top-level key, not in a table
-    assert "# my models" in text and "# the big one" in text
+    assert "# my models" in text
+    assert "# the big one" in text
     for untouched in ("default_agents", "refresh_seconds", "[efforts]", "prune"):
         assert untouched not in text
     assert config.to_data(config.load_file(cfg_file)) == config.to_data(c)
@@ -85,7 +86,8 @@ def test_extra_skipped_folders_are_written_as_prune_extra(cfg_file):
     c.prune = frozenset({"node_modules"})  # fewer than the built-ins: the full list
     config.save(c, cfg_file)
     text = cfg_file.read_text()
-    assert 'prune = ["node_modules"]' in text and "prune_extra" not in text
+    assert 'prune = ["node_modules"]' in text
+    assert "prune_extra" not in text
     assert config.load_file(cfg_file).prune == {"node_modules"}
 
 
@@ -96,7 +98,8 @@ def test_a_new_file_starts_from_the_documented_template(tmp_path, monkeypatch):
     c.scan_depth = 5
     config.save(c, f)
     text = f.read_text()
-    assert "# corral configuration" in text and "scan_depth = 5" in text
+    assert "# corral configuration" in text
+    assert "scan_depth = 5" in text
     assert config.load_file(f).scan_depth == 5
 
 

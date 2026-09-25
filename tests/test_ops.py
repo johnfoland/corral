@@ -12,7 +12,8 @@ def labels_in(herdr, ws):
 
 def test_up_builds_utility_and_default_agent(herdr, cfg, root):
     res = ops.up(herdr, cfg, root / "cruzainet" / "api")
-    assert res.action == "created" and res.label == "cruzainet/api"
+    assert res.action == "created"
+    assert res.label == "cruzainet/api"
     assert labels_in(herdr, res.workspace) == ["cruzainet/api", f"Sonnet{B}medium"]
     utility_panes = [p for p in herdr.panes.values() if p["tab"].endswith("t2")]
     assert len(utility_panes) == 3
@@ -24,7 +25,8 @@ def test_up_builds_utility_and_default_agent(herdr, cfg, root):
 def test_up_existing_focuses_and_fill_is_idempotent(herdr, cfg, root):
     first = ops.up(herdr, cfg, root / "courses")
     again = ops.up(herdr, cfg, root / "courses")
-    assert again.action == "focused" and again.workspace == first.workspace
+    assert again.action == "focused"
+    assert again.workspace == first.workspace
     filled = ops.up(herdr, cfg, root / "courses", fill=True, agents=["sonnet", "opus/high"])
     assert [(t.label, t.action) for t in filled.tabs] == [
         ("courses", "have"),
@@ -34,7 +36,7 @@ def test_up_existing_focuses_and_fill_is_idempotent(herdr, cfg, root):
 
 
 def test_fill_treats_legacy_spaced_label_as_present(herdr, cfg, root):
-    ws, tab, _ = herdr.create_workspace(str(root / "courses"), "courses")
+    ws, _tab, _ = herdr.create_workspace(str(root / "courses"), "courses")
     herdr.create_tab(ws, str(root / "courses"), f"Sonnet {B} medium")
     res = ops.up(herdr, cfg, root / "courses", fill=True, dry_run=True)
     assert (f"Sonnet{B}medium", "have") in [(t.label, t.action) for t in res.tabs]
@@ -68,7 +70,8 @@ def test_agent_start_busy_pane_is_retried(herdr):
 def test_failed_agent_leaves_shell_and_reports(herdr, cfg, root):
     herdr.fail_start.add("claude")
     res = ops.up(herdr, cfg, root / "courses")
-    assert not res.ok and res.tabs[-1].action == "failed"
+    assert not res.ok
+    assert res.tabs[-1].action == "failed"
 
 
 def test_unknown_model_fails_before_touching_herdr(herdr, cfg, root):
@@ -83,10 +86,12 @@ def test_force_fill_closes_strays_keeps_agents(herdr, cfg, root):
     busy, busy_pane = herdr.create_tab(ws, "/tmp", "manual claude")
     herdr.agents[busy_pane] = {"name": "", "kind": "claude", "args": [], "status": "idle"}
     plan = ops.up(herdr, cfg, root / "courses", force_fill=True, dry_run=True)
-    assert plan.closed == ["zsh"] and plan.kept_running == ["manual claude"]
+    assert plan.closed == ["zsh"]
+    assert plan.kept_running == ["manual claude"]
     assert stray in herdr.tabs  # dry run changed nothing
     ops.up(herdr, cfg, root / "courses", force_fill=True)
-    assert stray not in herdr.tabs and busy in herdr.tabs
+    assert stray not in herdr.tabs
+    assert busy in herdr.tabs
 
 
 def test_stop_by_label_name_and_all(herdr, cfg, root):
@@ -97,7 +102,8 @@ def test_stop_by_label_name_and_all(herdr, cfg, root):
     assert r[0].action == "stopped"
     assert ops.stop(herdr, cfg, ["ghost"], ws=ws)[0].action == "failed"
     r = ops.stop(herdr, cfg, [], ws=ws, all_=True)
-    assert [x.target for x in r] == [f"Opus{B}high"] and not herdr.agents
+    assert [x.target for x in r] == [f"Opus{B}high"]
+    assert not herdr.agents
     with pytest.raises(ConfigError):
         ops.stop(herdr, cfg, ["x"], ws=ws, all_=True)
 
@@ -110,6 +116,7 @@ def test_close_by_label_and_refusals(herdr, cfg, root, monkeypatch):
     monkeypatch.setenv("HERDR_WORKSPACE_ID", a)
     assert ops.close(herdr, ["courses"])[0].action == "refused"
     r = ops.close(herdr, ["courses"], dry_run=True, include_self=True)[0]
-    assert r.action == "would-close" and r.agents == ["claude-sonnet-medium"]
+    assert r.action == "would-close"
+    assert r.agents == ["claude-sonnet-medium"]
     assert ops.close(herdr, [a], include_self=True)[0].action == "closed"
     assert a not in herdr.ws
