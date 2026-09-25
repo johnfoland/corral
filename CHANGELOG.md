@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/johnfoland/corral/compare/v0.1.0...v0.1.1) (2026-09-25)
+
+
+### Documentation
+
+* install from Homebrew as johnfoland/tap/corral-herdr ([e14e8fd](https://github.com/johnfoland/corral/commit/e14e8fd4b79aa9749d52dffff176f1e10114b4e9))
+
 ## 0.1.0 (2026-09-25)
 
 
