@@ -12,7 +12,7 @@ wheels = [
 ]
 
 [[package]]
-name = "corral"
+name = "corral-herdr"
 version = "0.0.0"
 source = { editable = "." }
 dependencies = [

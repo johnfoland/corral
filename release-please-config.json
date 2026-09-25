@@ -17,7 +17,7 @@
   ],
   "packages": {
     ".": {
-      "package-name": "corral",
+      "package-name": "corral-herdr",
       "extra-files": [
         { "type": "generic", "path": "src/corral/__init__.py" },
         { "type": "json", "path": ".claude-plugin/plugin.json", "jsonpath": "$.version" }

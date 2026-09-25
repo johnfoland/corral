@@ -54,7 +54,7 @@ add a `Release-As: 1.0.0` footer to a commit.
 ### One-time setup
 
 - **PyPI trusted publishing:** on pypi.org, add a pending publisher for
-  project `corral`: owner `johnfoland`, repo `corral`, workflow `release.yml`,
+  project `corral-herdr`: owner `johnfoland`, repo `corral`, workflow `release.yml`,
   environment `pypi`.
 - **GitHub environment:** create an environment named `pypi` in the repo
   settings. Optionally require approval there.

@@ -25,9 +25,11 @@ scripts and coding agents.
 Requires Python 3.11+ and herdr 0.8+.
 
 ```sh
-uv tool install corral          # or: pipx install corral
+uv tool install corral-herdr    # or: pipx install corral-herdr
 brew install johnfoland/tap/corral
 ```
+
+The PyPI package is `corral-herdr`; the command it installs is `corral`.
 
 ## Use
 
