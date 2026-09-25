@@ -1,0 +1,14 @@
+{
+  "name": "corral",
+  "owner": {
+    "name": "John Foland",
+    "email": "john@johnfoland.net"
+  },
+  "plugins": [
+    {
+      "name": "corral",
+      "source": "./",
+      "description": "Agent skill for corral: drive herdr project workspaces and agent tabs."
+    }
+  ]
+}

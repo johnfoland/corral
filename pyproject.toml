@@ -1,0 +1,50 @@
+[project]
+name = "corral"
+version = "0.0.0"
+description = "Round up your projects into herdr workspaces: a utility tab plus model/effort agent tabs, from a CLI or a TUI."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "John Foland", email = "john@johnfoland.net" }]
+requires-python = ">=3.11"
+dependencies = ["textual>=8,<9"]
+keywords = ["herdr", "terminal", "workspace", "tui", "claude", "codex", "agents"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development",
+    "Topic :: Terminals",
+]
+
+[project.urls]
+Homepage = "https://github.com/johnfoland/corral"
+Changelog = "https://github.com/johnfoland/corral/blob/master/CHANGELOG.md"
+Issues = "https://github.com/johnfoland/corral/issues"
+
+[project.scripts]
+corral = "corral.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "tests", "skills", "README.md", "CHANGELOG.md", "LICENSE"]
+
+[dependency-groups]
+dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.6"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
