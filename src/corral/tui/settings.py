@@ -52,6 +52,15 @@ def join_args(args) -> str:
     return " ".join(a if a and not re.search(r"[\s'\"\\#]", a) else shlex.quote(a) for a in args)
 
 
+def _move(items: list, i: int | None, step: int) -> int | None:
+    """Swap items[i] with the item `step` away; returns its new index, or
+    None when there is nothing to move or no room to move it."""
+    if i is None or not 0 <= i + step < len(items):
+        return None
+    items[i], items[i + step] = items[i + step], items[i]
+    return i + step
+
+
 def _seconds(ms: int) -> str:
     s = ms / 1000
     return str(int(s)) if s == int(s) else str(s)
@@ -571,13 +580,10 @@ class SettingsScreen(Screen[Config | None]):
     @on(Button.Pressed, "#agent-up")
     @on(Button.Pressed, "#agent-down")
     def agent_move(self, event: Button.Pressed) -> None:
-        i = self.agent_index()
-        j = (i - 1 if event.button.id == "agent-up" else i + 1) if i is not None else None
-        if i is None or not 0 <= j < len(self.default_agents):
-            return
-        a = self.default_agents
-        a[i], a[j] = a[j], a[i]
-        self.render_agents(j)
+        step = -1 if event.button.id == "agent-up" else 1
+        j = _move(self.default_agents, self.agent_index(), step)
+        if j is not None:
+            self.render_agents(j)
 
     # utility
 
@@ -648,11 +654,10 @@ class SettingsScreen(Screen[Config | None]):
         box.mount_all(rows)
 
     def save_effort_rows(self) -> None:
-        for box in self.query("Input.effort"):
-            tool = box.name
+        for box in self.query("Input.effort").results(Input):
             levels = _split_list(box.value)
-            if levels:
-                self.efforts[tool] = levels
+            if box.name and levels:
+                self.efforts[box.name] = levels
 
     def model_index(self) -> int | None:
         table = self.query_one("#model-table", DataTable)
@@ -714,13 +719,10 @@ class SettingsScreen(Screen[Config | None]):
     @on(Button.Pressed, "#model-up")
     @on(Button.Pressed, "#model-down")
     def model_move(self, event: Button.Pressed) -> None:
-        i = self.model_index()
-        j = (i - 1 if event.button.id == "model-up" else i + 1) if i is not None else None
-        if i is None or not 0 <= j < len(self.models):
-            return
-        m = self.models
-        m[i], m[j] = m[j], m[i]
-        self.render_models(j)
+        step = -1 if event.button.id == "model-up" else 1
+        j = _move(self.models, self.model_index(), step)
+        if j is not None:
+            self.render_models(j)
 
     # save / cancel
 

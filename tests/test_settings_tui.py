@@ -4,7 +4,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
-from textual.widgets import DataTable, Input, Switch, TabbedContent
+from textual.widgets import DataTable, Input, OptionList, Switch, TabbedContent
 
 from corral import config, ops
 from corral.tui.app import AgentPicker, Confirm, CorralApp
@@ -82,7 +82,7 @@ async def test_add_remove_and_reorder_default_agents(app, cfg_path):
         assert s.default_agents == ["sonnet/medium", "opus/high"]
         await pilot.click("#agent-up")  # the new one is highlighted
         assert s.default_agents == ["opus/high", "sonnet/medium"]
-        s.query_one("#default-agents").highlighted = 1
+        s.query_one("#default-agents", OptionList).highlighted = 1
         await pilot.click("#agent-remove")
         await pilot.press("ctrl+s")
         await settle(pilot, app)

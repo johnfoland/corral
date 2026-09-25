@@ -23,6 +23,7 @@ import json
 import sys
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
+from typing import Any
 
 from corral import __version__, config, labels, ops, projects
 from corral.config import Config, ConfigError
@@ -164,7 +165,7 @@ def cmd_ls(ctx: Ctx) -> int:
             "branch": p.branch,
             "workspace": None,
         }
-        if ws:
+        if ws and snap:
             entry["workspace"] = {
                 "id": ws.id,
                 "label": ws.label,
@@ -173,17 +174,21 @@ def cmd_ls(ctx: Ctx) -> int:
                 "agents": [asdict(t) for t in projects.agent_tabs(snap, ws.id, cfg)],
             }
         rows.append(entry)
-    others = [
-        {
-            "id": w.id,
-            "label": w.label,
-            "status": w.agent_status,
-            "tabs": w.tab_count,
-            "agents": [asdict(t) for t in projects.agent_tabs(snap, w.id, cfg)],
-        }
-        for w in (snap.workspaces if snap else [])
-        if w.id not in matched
-    ]
+    others = (
+        [
+            {
+                "id": w.id,
+                "label": w.label,
+                "status": w.agent_status,
+                "tabs": w.tab_count,
+                "agents": [asdict(t) for t in projects.agent_tabs(snap, w.id, cfg)],
+            }
+            for w in snap.workspaces
+            if w.id not in matched
+        ]
+        if snap
+        else []
+    )
 
     if ctx.json:
         print(
@@ -290,7 +295,7 @@ def _common_options(*, top: bool) -> argparse.ArgumentParser:
 
     The subcommand's copies default to SUPPRESS: otherwise their defaults
     would overwrite a value given before the subcommand (`corral --root X ls`)."""
-    d = {} if top else {"default": argparse.SUPPRESS}
+    d: dict[str, Any] = {} if top else {"default": argparse.SUPPRESS}
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--root", metavar="DIR", help="project root (default: config `root`)", **d)
     common.add_argument("--config", metavar="FILE", help="config file (default: XDG location)", **d)

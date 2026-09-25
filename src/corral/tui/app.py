@@ -12,12 +12,14 @@ import contextlib
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import cast
 
 from rich.text import Text
 from textual import on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
+from textual.coordinate import Coordinate
 from textual.css.query import NoMatches
 from textual.widgets import (
     DataTable,
@@ -68,17 +70,21 @@ class ProjectTable(DataTable):
     BINDINGS = [
         Binding("right,l", "expand", "Expand", show=False),
         Binding("left,h", "collapse", "Collapse", show=False),
-        Binding("space", "toggle", "Fold"),
+        Binding("space", "toggle_fold", "Fold"),
     ]
 
+    @property
+    def corral(self) -> CorralApp:
+        return cast("CorralApp", self.app)
+
     def action_expand(self) -> None:
-        self.app.expand_current()
+        self.corral.expand_current()
 
     def action_collapse(self) -> None:
-        self.app.collapse_current()
+        self.corral.collapse_current()
 
-    def action_toggle(self) -> None:
-        self.app.toggle_current()
+    def action_toggle_fold(self) -> None:
+        self.corral.toggle_current()
 
 
 class CorralApp(App):
@@ -366,7 +372,7 @@ class CorralApp(App):
         if table.row_count == 0:
             return None
         try:
-            return table.coordinate_to_cell_key((table.cursor_row, 0)).row_key.value
+            return table.coordinate_to_cell_key(Coordinate(table.cursor_row, 0)).row_key.value
         except Exception:
             return None
 
@@ -637,6 +643,9 @@ class CorralApp(App):
         if not p:
             return
         s = self.st(p.rel)
+        ws = s.ws
+        if not ws:
+            return
         running = [a for a in s.agents if a.running and a.pane_id]
         if not running:
             self.notify(f"{p.rel}: no running agents", severity="warning")
@@ -644,9 +653,9 @@ class CorralApp(App):
 
         def picked(panes: list[str] | None) -> None:
             if panes:
-                self.run_op(p.rel, f"stop {' '.join(panes)}", ops.stop, self.cfg, panes, ws=s.ws.id)
+                self.run_op(p.rel, f"stop {' '.join(panes)}", ops.stop, self.cfg, panes, ws=ws.id)
 
-        self.push_screen(StopPicker(f"Stop agents in [b]{p.rel}[/b] ({s.ws.id})", running), picked)
+        self.push_screen(StopPicker(f"Stop agents in [b]{p.rel}[/b] ({ws.id})", running), picked)
 
     @work(group="ops")
     async def action_force_fill(self) -> None:
@@ -679,6 +688,8 @@ class CorralApp(App):
         if not p:
             return
         ws = self.st(p.rel).ws
+        if not ws:
+            return
         if ws.id == self.self_ws:
             self.notify(
                 f"{ws.id} is the workspace corral runs in -- close it from another one",

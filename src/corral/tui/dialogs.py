@@ -50,6 +50,8 @@ class AgentPicker(ModalScreen[str | None]):
 
     @on(OptionList.OptionHighlighted, "#models")
     def model_highlighted(self, event: OptionList.OptionHighlighted) -> None:
+        if event.option.id is None:
+            return
         self.model = self.cfg.model(event.option.id)
         efforts = self.query_one("#efforts", OptionList)
         levels = self.cfg.efforts_for(self.model.tool)

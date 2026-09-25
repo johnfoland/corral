@@ -33,6 +33,8 @@ async def test_tree_folds_and_open_builds_nested_workspace(herdr, cfg):
         await pilot.press("left")  # to the parent
         await pilot.press("left")  # fold it
         assert "cruzainet/api" not in rows(app)
+        await pilot.press("space")  # space toggles the fold
+        assert "cruzainet/api" in rows(app)
 
 
 async def test_add_agent_twice_suffixes(herdr, cfg):

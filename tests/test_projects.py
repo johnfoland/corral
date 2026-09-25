@@ -34,9 +34,11 @@ def test_find_workspace_by_label_then_legacy_basename(herdr, root):
     api = root / "cruzainet" / "api"
     ws, _, _ = herdr.create_workspace(str(api.resolve()), "api")  # legacy basename label
     snap = herdr.snapshot()
-    assert projects.find_workspace(snap, "cruzainet/api", api).id == ws
+    found = projects.find_workspace(snap, "cruzainet/api", api)
+    assert found and found.id == ws
     assert projects.find_workspace(snap, "cruzainet/web-app", root / "cruzainet/web-app") is None
     # a basename match in a different directory is not the same project
     assert projects.find_workspace(snap, "other/api", Path("/nowhere/api")) is None
     ws2, _, _ = herdr.create_workspace(str(api), "cruzainet/api")
-    assert projects.find_workspace(herdr.snapshot(), "cruzainet/api", api).id == ws2
+    found = projects.find_workspace(herdr.snapshot(), "cruzainet/api", api)
+    assert found and found.id == ws2
