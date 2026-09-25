@@ -27,6 +27,15 @@ The CLI and the TUI both go through `ops`, so put behaviour changes there.
 Tests use `tests/fake_herdr.py`, an in-memory herdr with the same methods as
 `Herdr`.
 
+## Roadmap and decisions
+
+Planned work and ideas are [GitHub issues](https://github.com/johnfoland/corral/issues);
+look there before starting something, and open one for anything you won't
+finish now. Settled design questions are in [docs/decisions.md](docs/decisions.md).
+Coding agents also follow [AGENTS.md](AGENTS.md).
+
+Work on a branch and open a pull request; `master` only takes merges.
+
 ## Commits
 
 Use [Conventional Commits](https://www.conventionalcommits.org/). The

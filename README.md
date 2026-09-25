@@ -137,7 +137,9 @@ uv run ruff check . && uv run ruff format --check .
 
 Tests run against an in-memory fake herdr (`tests/fake_herdr.py`); nothing
 touches a real herdr session. See [CONTRIBUTING.md](CONTRIBUTING.md) for
-commit conventions and the release process.
+commit conventions and the release process, the
+[issues](https://github.com/johnfoland/corral/issues) for the roadmap, and
+[docs/decisions.md](docs/decisions.md) for settled design questions.
 
 ## License
 
