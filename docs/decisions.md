@@ -90,6 +90,14 @@ with the code.
 
 ## MIT license (2026-09)
 
+## docs: changes don't release on their own (2026-09)
+
+release-please only opens a release PR for commit types with a visible
+changelog section, and the two can't be set separately. The Documentation
+section is hidden, so a docs-only merge doesn't propose a release; docs
+changes ship with the next `feat`/`fix` release but aren't listed in the
+changelog. (Before this, a README-only change became release 0.1.1.)
+
 ## Roadmap in GitHub Issues (2026-09)
 
 Ideas, follow-ups and planned work are issues on the repo, not files. Agents
