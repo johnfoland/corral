@@ -14,12 +14,14 @@ The code is laid out in layers, each depending only on the ones above it:
 | Module | Role |
 |---|---|
 | `herdr.py` | typed wrapper over the `herdr` CLI; raises `HerdrError(code, message)` |
-| `config.py` | XDG TOML config over built-in defaults |
+| `config.py` | XDG TOML config over built-in defaults; `save` writes it back, keeping comments (tomlkit) |
 | `labels.py` | `Model•effort[-N]` tab labels and agent names |
 | `projects.py` | scanning the root, workspace matching |
 | `ops.py` | the operations: `up`, `tab`, `stop`, `close` |
 | `cli.py` | argparse front end, human and `--json` output |
 | `tui/app.py` | the Textual app; calls `ops` in worker threads |
+| `tui/dialogs.py` | modal dialogs: agent picker, stop picker, confirm |
+| `tui/settings.py` | the settings screen (`,`) over `config.save` |
 
 The CLI and the TUI both go through `ops`, so put behaviour changes there.
 Tests use `tests/fake_herdr.py`, an in-memory herdr with the same methods as

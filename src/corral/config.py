@@ -5,7 +5,8 @@ config.toml, then ~/.config/corral/config.toml. The XDG path is used on macOS
 too, deliberately -- not ~/Library/Application Support.
 
 Every key is optional; a missing file means all defaults. See DEFAULT_TOML
-(written by `corral config init`) for the documented shape.
+(written by `corral config init`) for the documented shape. `save` writes a
+Config back, keeping the file's comments and layout (the TUI's settings).
 """
 
 from __future__ import annotations
@@ -14,6 +15,10 @@ import os
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
+
+import tomlkit
+from tomlkit.exceptions import TOMLKitError
+from tomlkit.items import Whitespace
 
 EFFORT = "{effort}"
 
@@ -110,9 +115,9 @@ def config_path() -> Path:
     return Path(base).expanduser() / "corral" / "config.toml"
 
 
-def load(path: Path | None = None, root: str | None = None) -> Config:
-    """Load the config file (if present) over the defaults. `root` (from a CLI
-    flag) beats $CORRAL_ROOT, which beats the file's `root`."""
+def load_file(path: Path | None = None) -> Config:
+    """The config file (if present) over the defaults, and nothing else:
+    --root and $CORRAL_ROOT override a session, but never belong in the file."""
     path = path or config_path()
     data: dict = {}
     if path.is_file():
@@ -122,10 +127,22 @@ def load(path: Path | None = None, root: str | None = None) -> Config:
             raise ConfigError(f"{path}: {e}") from e
     cfg = from_dict(data)
     cfg.path = path if path.is_file() else None
-    override = root or os.environ.get("CORRAL_ROOT")
+    return cfg
+
+
+def load(path: Path | None = None, root: str | None = None) -> Config:
+    """Load the config file (if present) over the defaults. `root` (from a CLI
+    flag) beats $CORRAL_ROOT, which beats the file's `root`."""
+    cfg = load_file(path)
+    override = root_override(root)
     if override:
         cfg.root = Path(override).expanduser()
     return cfg
+
+
+def root_override(root: str | None = None) -> str | None:
+    """The root that beats the file's for this session, if any."""
+    return root or os.environ.get("CORRAL_ROOT") or None
 
 
 def _expect(data: dict, key: str, kind: type | tuple[type, ...], where: str = ""):
@@ -197,6 +214,122 @@ def from_dict(data: dict) -> Config:
     for spec in cfg.default_agents:
         cfg.model(spec.partition("/")[0])  # fail early on a bad default
     return cfg
+
+
+# --- writing -----------------------------------------------------------------
+
+
+def tilde(path: Path) -> str:
+    """~/Code rather than /Users/me/Code, for paths under home."""
+    home = Path.home()
+    if path == home:
+        return "~"
+    try:
+        return "~/" + str(path.relative_to(home))
+    except ValueError:
+        return str(path)
+
+
+def to_data(cfg: Config) -> dict:
+    """cfg as TOML data -- the inverse of from_dict."""
+    u = cfg.utility
+    data: dict = {
+        "root": tilde(cfg.root),
+        "scan_depth": cfg.scan_depth,
+        "default_agents": list(cfg.default_agents),
+        "refresh_seconds": float(cfg.refresh_seconds),
+        "agent_timeout_ms": cfg.agent_timeout_ms,
+        "utility": {
+            "enabled": u.enabled,
+            "top": u.top,
+            "bottom_left": u.bottom_left,
+            "bottom_right": u.bottom_right,
+        },
+        "efforts": {tool: list(levels) for tool, levels in cfg.efforts.items()},
+        "models": [
+            {"key": m.key, "tool": m.tool, "display": m.display, "args": list(m.args)}
+            for m in cfg.models
+        ],
+    }
+    if cfg.prune != DEFAULT_PRUNE:
+        if cfg.prune > DEFAULT_PRUNE:
+            data["prune_extra"] = sorted(cfg.prune - DEFAULT_PRUNE)
+        else:
+            data["prune"] = sorted(cfg.prune)
+    return data
+
+
+def _plain(item):
+    return item.unwrap() if hasattr(item, "unwrap") else item
+
+
+def _put_table(table, value: dict, default: dict) -> None:
+    for k in [k for k in table if k not in value]:
+        del table[k]
+    for k, v in value.items():
+        if (k in table or v != default.get(k)) and _plain(table.get(k)) != v:
+            table[k] = v
+
+
+def _put_models(doc, models: list[dict]) -> None:
+    """Update [[models]]: in place while the keys and their order are
+    unchanged; otherwise rebuild it in the new order, reusing each surviving
+    table (and the comments in it), one blank line apart."""
+    old = doc.get("models")
+    tables = list(old) if isinstance(old, list) else []
+    if [str(t.get("key")) for t in tables] == [m["key"] for m in models]:
+        for t, m in zip(tables, models, strict=True):
+            _put_table(t, m, {})
+        return
+    by_key = {str(t.get("key")): t for t in tables}
+    aot = tomlkit.aot()
+    for m in models:
+        t = by_key.get(m["key"]) or tomlkit.table()
+        _put_table(t, m, {})
+        body = t.value.body
+        while body and body[-1][0] is None and isinstance(body[-1][1], Whitespace):
+            body.pop()  # the aot puts one blank line between tables itself
+        aot.append(t)
+    doc["models"] = aot
+
+
+def save(cfg: Config, path: Path) -> None:
+    """Write cfg to path, keeping the file's comments and layout.
+
+    A key is written if the file already has it or its value differs from
+    the default, so saving an untouched default leaves the file alone. A new
+    file starts from DEFAULT_TOML. Invalid settings raise ConfigError before
+    anything is written; a symlinked file is written through the link."""
+    data = to_data(cfg)
+    from_dict(data)  # validate
+    try:
+        text = path.read_text(encoding="utf-8") if path.is_file() else DEFAULT_TOML
+        doc = tomlkit.parse(text)
+    except (OSError, TOMLKitError) as e:
+        raise ConfigError(f"{path}: {e}") from e
+    defaults = to_data(Config())
+    for key in ("prune", "prune_extra"):
+        if key in doc and key not in data:
+            del doc[key]
+    for key, value in data.items():
+        if key not in doc and value == defaults.get(key):
+            continue
+        if key == "models":
+            if [_plain(t) for t in doc.get("models", [])] != value:
+                _put_models(doc, value)
+        elif isinstance(value, dict) and isinstance(doc.get(key), dict):
+            _put_table(doc[key], value, defaults.get(key, {}))
+        elif _plain(doc.get(key)) != value:
+            doc[key] = value
+    target = path.resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_name(target.name + ".corral-tmp")
+    try:
+        tmp.write_text(tomlkit.dumps(doc), encoding="utf-8")
+        os.replace(tmp, target)
+    except OSError as e:
+        tmp.unlink(missing_ok=True)
+        raise ConfigError(f"{path}: {e}") from e
 
 
 DEFAULT_TOML = """\

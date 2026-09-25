@@ -9,9 +9,18 @@ raised as HerdrError with that code, so callers can match on e.g.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
+
+# Agent kinds herdr 0.8 can start, for when `herdr agent start --help` can't
+# be read.
+AGENT_KINDS = (
+    "claude", "codex", "gemini", "opencode", "cursor", "copilot", "amp", "pi", "devin",
+    "agy", "cline", "omp", "mastracode", "kimi", "kiro", "droid", "grok", "hermes",
+    "kilo", "qodercli", "maki",
+)  # fmt: skip
 
 
 class HerdrError(Exception):
@@ -118,6 +127,21 @@ class Herdr:
             )
         except (OSError, subprocess.TimeoutExpired):
             return False
+
+    def agent_kinds(self) -> list[str]:
+        """The agent kinds this herdr can start (`--kind` values)."""
+        try:
+            out = subprocess.run(
+                [self.binary, "agent", "start", "--help"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                stdin=subprocess.DEVNULL,
+            ).stdout
+        except (OSError, subprocess.TimeoutExpired):
+            return list(AGENT_KINDS)
+        m = re.search(r"--kind\b.*?\[possible values: ([^\]]+)\]", out, re.S)
+        return [k.strip() for k in m.group(1).split(",")] if m else list(AGENT_KINDS)
 
     def call(self, *args: str) -> dict:
         try:

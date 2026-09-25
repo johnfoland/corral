@@ -271,14 +271,14 @@ def cmd_config(ctx: Ctx) -> int:
 def cmd_tui(ctx: Ctx) -> int:
     from corral.tui.app import run  # Textual loads only when needed
 
-    if getattr(ctx.args, "dir", None):
-        ctx.cfg.root = Path(ctx.args.dir).expanduser()
-    if not ctx.cfg.root.is_dir():
-        raise ConfigError(
-            f"root is not a directory: {ctx.cfg.root} (set `root` in "
-            f"{config.config_path()}, or pass --root)"
-        )
-    run(ctx.cfg)
+    override = getattr(ctx.args, "dir", None) or config.root_override(ctx.args.root)
+    if override:
+        ctx.cfg.root = Path(override).expanduser()
+        if not ctx.cfg.root.is_dir():
+            raise ConfigError(f"root is not a directory: {ctx.cfg.root}")
+    # A bad root from the config file opens the TUI's settings instead.
+    path = Path(ctx.args.config).expanduser() if ctx.args.config else config.config_path()
+    run(ctx.cfg, path, override)
     return EXIT_OK
 
 

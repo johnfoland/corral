@@ -98,7 +98,9 @@ live in these workspaces.
 `$XDG_CONFIG_HOME/corral/config.toml`, else `~/.config/corral/config.toml`,
 on macOS too. `corral config init` writes a commented starter file, and
 `corral config show` prints the settings in effect. The root can also come
-from `--root` or `$CORRAL_ROOT`.
+from `--root` or `$CORRAL_ROOT`. People can also change every setting from
+the TUI's settings screen (press `,`), so point a user there rather than
+hand-editing the file for them unless they ask.
 
 To add a model, add a `[[models]]` entry with `key`, `tool` (the herdr agent
 kind: claude, codex, gemini, opencode, …), `display` and `args` (`{effort}` is

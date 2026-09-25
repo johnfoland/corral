@@ -17,26 +17,25 @@ from rich.text import Text
 from textual import on, work
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.containers import Horizontal
 from textual.css.query import NoMatches
-from textual.screen import ModalScreen
 from textual.widgets import (
     DataTable,
     Footer,
     Header,
     Input,
-    Label,
-    OptionList,
     RichLog,
-    SelectionList,
     Static,
 )
-from textual.widgets.option_list import Option
 
-from corral import __version__, labels, ops, projects
-from corral.config import Config, ConfigError, ModelSpec
+from corral import __version__, config, labels, ops, projects
+from corral.config import Config, ConfigError
 from corral.herdr import Herdr, HerdrError, Workspace
 from corral.projects import AgentTab, Project, Tree
+from corral.tui.dialogs import AgentPicker, Confirm, StopPicker
+from corral.tui.settings import SettingsScreen
+
+__all__ = ["AgentPicker", "Confirm", "CorralApp", "StopPicker", "run"]
 
 STATUS_STYLE = {
     "working": "yellow",
@@ -58,131 +57,6 @@ class NodeState:
 
 def status_text(status: str) -> Text:
     return Text("●", style=STATUS_STYLE.get(status, "dim"))
-
-
-# --- modals ------------------------------------------------------------------
-
-
-class AgentPicker(ModalScreen[str | None]):
-    """Pick a model, then an effort. Returns a "key/effort" spec."""
-
-    BINDINGS = [Binding("escape", "cancel", "Cancel")]
-
-    def __init__(self, cfg: Config, project: str) -> None:
-        super().__init__()
-        self.cfg = cfg
-        self.project = project
-        self.model: ModelSpec | None = None
-
-    def compose(self) -> ComposeResult:
-        with Vertical(classes="dialog"):
-            yield Label(f"New agent tab for [b]{self.project}[/b]", classes="title")
-            with Horizontal(id="picker"):
-                yield OptionList(
-                    *[
-                        Option(f"{m.display}  [dim]{m.tool}[/dim]", id=m.key)
-                        for m in self.cfg.models
-                    ],
-                    id="models",
-                )
-                yield OptionList(id="efforts")
-            yield Label("[dim]enter: choose  ←/→: switch list  esc: cancel[/dim]")
-
-    def on_mount(self) -> None:
-        models = self.query_one("#models", OptionList)
-        keys = [m.key for m in self.cfg.models]
-        default = ops.parse_spec(self.cfg.default_agents[0])[0] if self.cfg.default_agents else ""
-        models.highlighted = keys.index(default) if default in keys else 0
-        models.focus()
-
-    @on(OptionList.OptionHighlighted, "#models")
-    def model_highlighted(self, event: OptionList.OptionHighlighted) -> None:
-        self.model = self.cfg.model(event.option.id)
-        efforts = self.query_one("#efforts", OptionList)
-        levels = self.cfg.efforts_for(self.model.tool)
-        efforts.clear_options()
-        efforts.add_options([Option(labels.tab_label(self.model.display, e), id=e) for e in levels])
-        efforts.highlighted = levels.index("medium") if "medium" in levels else 0
-
-    @on(OptionList.OptionSelected, "#models")
-    def model_selected(self) -> None:
-        self.query_one("#efforts", OptionList).focus()
-
-    @on(OptionList.OptionSelected, "#efforts")
-    def effort_selected(self, event: OptionList.OptionSelected) -> None:
-        if self.model:
-            self.dismiss(f"{self.model.key}/{event.option.id}")
-
-    def key_right(self) -> None:
-        self.query_one("#efforts", OptionList).focus()
-
-    def key_left(self) -> None:
-        self.query_one("#models", OptionList).focus()
-
-    def action_cancel(self) -> None:
-        self.dismiss(None)
-
-
-class StopPicker(ModalScreen[list[str] | None]):
-    """Choose running agents to stop. Returns pane ids."""
-
-    BINDINGS = [
-        Binding("escape", "cancel", "Cancel"),
-        Binding("s", "stop", "Stop selected"),
-        Binding("a", "select_all", "Select all"),
-    ]
-
-    def __init__(self, title: str, agents: list[AgentTab]) -> None:
-        super().__init__()
-        self.title_text = title
-        self.agents = agents
-
-    def compose(self) -> ComposeResult:
-        with Vertical(classes="dialog"):
-            yield Label(self.title_text, classes="title")
-            yield SelectionList[str](
-                *[
-                    (f"{a.label}  [dim]{a.status} · {a.name or a.pane_id}[/dim]", a.pane_id)
-                    for a in self.agents
-                ],
-                id="agents",
-            )
-            yield Label(
-                "[dim]space: toggle  a: all  s: stop selected  esc: cancel\n"
-                "Stopping closes the agent's pane.[/dim]"
-            )
-
-    def action_select_all(self) -> None:
-        self.query_one(SelectionList).select_all()
-
-    def action_stop(self) -> None:
-        chosen = list(self.query_one(SelectionList).selected)
-        self.dismiss(chosen or None)
-
-    def action_cancel(self) -> None:
-        self.dismiss(None)
-
-
-class Confirm(ModalScreen[bool]):
-    BINDINGS = [
-        Binding("y", "answer(True)", "Yes"),
-        Binding("n,escape", "answer(False)", "No"),
-    ]
-
-    def __init__(self, title: str, body: str) -> None:
-        super().__init__()
-        self.title_text = title
-        self.body = body
-
-    def compose(self) -> ComposeResult:
-        with Vertical(classes="dialog"):
-            yield Label(self.title_text, classes="title")
-            with VerticalScroll(id="confirm-body"):
-                yield Static(Text(self.body))
-            yield Label("[b]y[/b] proceed   [b]n[/b] cancel")
-
-    def action_answer(self, yes: bool) -> None:
-        self.dismiss(yes)
 
 
 # --- app ---------------------------------------------------------------------
@@ -240,14 +114,26 @@ class CorralApp(App):
         Binding("x", "close_ws", "Close WS"),
         Binding("slash", "filter", "Filter"),
         Binding("g", "rescan", "Refresh"),
+        Binding("comma", "settings", "Settings"),
         Binding("escape", "clear_filter", "Clear filter", show=False),
         Binding("q", "quit", "Quit"),
     ]
 
-    def __init__(self, cfg: Config, herdr: Herdr | None = None) -> None:
+    def __init__(
+        self,
+        cfg: Config,
+        herdr: Herdr | None = None,
+        *,
+        config_path: Path | None = None,
+        root_override: str | None = None,
+    ) -> None:
         super().__init__()
         self.cfg = cfg
         self.herdr = herdr or Herdr()
+        # Settings are written here; root_override (--root, $CORRAL_ROOT, or
+        # `corral tui DIR`) beats the file's root for this session.
+        self.config_path = config_path or cfg.path or config.config_path()
+        self.root_override = root_override
         self.ptree = Tree(cfg.root, {}, [])
         self.state: dict[str, NodeState] = {}
         self.expanded: set[str] = set()
@@ -271,7 +157,7 @@ class CorralApp(App):
 
     def on_mount(self) -> None:
         self.title = f"corral {__version__}"
-        self.sub_title = str(self.cfg.root).replace(str(Path.home()), "~", 1)
+        self.sub_title = config.tilde(self.cfg.root)
         table = self.query_one("#projects", DataTable)
         table.add_column(" ", key="dot", width=1)
         table.add_column("Project", key="project")
@@ -280,19 +166,64 @@ class CorralApp(App):
         table.add_column("Branch", key="branch")
         table.focus()
         self.action_rescan()
-        self.set_interval(self.cfg.refresh_seconds, self.action_refresh)
+        self.refresh_timer = self.set_interval(self.cfg.refresh_seconds, self.action_refresh)
         self.set_interval(RESCAN_SECONDS, self.action_rescan)
+        if not self.cfg.root.is_dir():
+            self.notify(
+                f"{config.tilde(self.cfg.root)} doesn't exist -- choose your project root",
+                severity="warning",
+                timeout=10,
+            )
+            self.action_settings()
+        elif not self.cfg.path:
+            self.notify("No settings file yet -- press , to set corral up", timeout=10)
 
     # App bindings apply on every screen, so without this, `x` pressed in a
-    # dialog would act on the project list behind it.
+    # dialog or in Settings would act on the project list behind it.
     MAIN_SCREEN_ACTIONS = frozenset(
         {"open", "add_agent", "fill", "utility", "stop", "force_fill", "close_ws", "filter",
-         "rescan", "clear_filter", "quit"}
+         "rescan", "clear_filter", "settings", "quit"}
     )  # fmt: skip
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         # False: disabled, and hidden from the footer
         return not (action in self.MAIN_SCREEN_ACTIONS and len(self.screen_stack) > 1)
+
+    # settings
+
+    def action_settings(self) -> None:
+        if isinstance(self.screen, SettingsScreen):
+            return
+        try:
+            kinds = self.herdr.agent_kinds()
+        except (HerdrError, OSError):
+            kinds = []
+        try:
+            screen = SettingsScreen(self.config_path, kinds, self.root_override)
+        except ConfigError as e:
+            self.notify(str(e), title="Can't read the settings file", severity="error")
+            return
+        self.push_screen(screen, self.apply_settings)
+
+    def apply_settings(self, saved: Config | None) -> None:
+        """Use settings the settings screen just saved: re-scan the (maybe
+        new) root and restart the refresh timer at its (maybe new) interval."""
+        if saved is None:
+            return
+        if self.root_override:
+            saved.root = Path(self.root_override).expanduser()
+        self.cfg = saved
+        self.sub_title = config.tilde(saved.root)
+        self.ptree = Tree(saved.root, {}, [])
+        self.state = {}
+        self.expanded.clear()
+        self.auto_expanded.clear()
+        self.scanned = False
+        self.refresh_timer.stop()
+        self.refresh_timer = self.set_interval(saved.refresh_seconds, self.action_refresh)
+        self.render_table()
+        self.action_rescan()
+        self.notify(f"Saved to {config.tilde(self.config_path)}")
 
     # data
 
@@ -781,5 +712,5 @@ def _git_dirty_count(path: Path) -> int:
     return sum(1 for ln in out.splitlines() if ln.strip())
 
 
-def run(cfg: Config) -> None:
-    CorralApp(cfg).run()
+def run(cfg: Config, config_path: Path | None = None, root_override: str | None = None) -> None:
+    CorralApp(cfg, config_path=config_path, root_override=root_override).run()

@@ -74,8 +74,18 @@ collide. Hidden directories and dependency/build folders (`node_modules`,
 | `x` | close the workspace: shows what goes with it, runs on `y` |
 | `→` `←` space | unfold / fold / toggle the tree |
 | `/` `g` `q` | filter, refresh, quit |
+| `,` | settings |
 
 ## Configure
+
+Press `,` in the TUI for the settings screen. Its tabs cover the project root
+(with a folder browser), the agent tabs a new workspace gets, the utility tab's
+three panes, the model matrix and effort levels, and a few advanced options.
+Saving writes the config file and keeps its comments and layout. If the root
+doesn't exist when the TUI starts, the settings screen opens so you can
+choose one.
+
+From the command line:
 
 ```sh
 corral config init      # writes a commented ~/.config/corral/config.toml

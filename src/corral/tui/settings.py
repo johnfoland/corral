@@ -1,0 +1,797 @@
+"""The settings screen: every config key, in tabs, written back to the
+config file with its comments kept (corral.config.save)."""
+
+from __future__ import annotations
+
+import asyncio
+import re
+import shlex
+import shutil
+from dataclasses import replace
+from pathlib import Path
+
+from rich.text import Text
+from textual import on, work
+from textual.app import ComposeResult
+from textual.binding import Binding
+from textual.containers import Horizontal, Vertical
+from textual.screen import ModalScreen, Screen
+from textual.suggester import Suggester
+from textual.widgets import (
+    Button,
+    DataTable,
+    DirectoryTree,
+    Footer,
+    Input,
+    Label,
+    OptionList,
+    Select,
+    Static,
+    Switch,
+    TabbedContent,
+    TabPane,
+)
+from textual.widgets.option_list import Option
+
+from corral import config, labels, ops, projects
+from corral.config import DEFAULT_PRUNE, Config, ConfigError, ModelSpec, Utility
+from corral.herdr import AGENT_KINDS
+from corral.tui.dialogs import AgentPicker, Confirm
+
+UTILITY_PANES = (("top", "Top"), ("bottom_left", "Bottom left"), ("bottom_right", "Bottom right"))
+
+
+def _split_list(text: str) -> list[str]:
+    """ "a, b  c" -> ["a", "b", "c"]."""
+    return [w for w in text.replace(",", " ").split() if w]
+
+
+def join_args(args) -> str:
+    """Arguments for display and editing: quoted only where shlex.split
+    needs it, so {effort} reads as {effort}, not '{effort}'."""
+    return " ".join(a if a and not re.search(r"[\s'\"\\#]", a) else shlex.quote(a) for a in args)
+
+
+def _seconds(ms: int) -> str:
+    s = ms / 1000
+    return str(int(s)) if s == int(s) else str(s)
+
+
+def command_status(cmd: str) -> Text:
+    """How a utility pane command will run: a plain shell, the program found
+    on PATH, or a shell because the program is missing."""
+    if not cmd.strip():
+        return Text("plain shell", style="dim")
+    try:
+        prog = shlex.split(cmd)[0]
+    except (ValueError, IndexError):
+        return Text("✗ can't parse this command", style="red")
+    found = shutil.which(prog)
+    if found:
+        return Text(f"✓ {config.tilde(Path(found))}", style="green")
+    return Text(f"✗ {prog} is not installed -- a plain shell instead", style="yellow")
+
+
+class PathSuggester(Suggester):
+    """Completes directory names as you type a path (accept with →)."""
+
+    def __init__(self) -> None:
+        super().__init__(use_cache=False, case_sensitive=True)
+
+    async def get_suggestion(self, value: str) -> str | None:
+        head, slash, prefix = value.rpartition("/")
+        if not slash or not prefix:
+            return None
+        base = Path(head or "/").expanduser()
+        if not base.is_dir():
+            return None
+        try:
+            names = sorted(
+                p.name
+                for p in base.iterdir()
+                if p.is_dir()
+                and p.name.startswith(prefix)
+                and (prefix.startswith(".") or not p.name.startswith("."))
+            )
+        except OSError:
+            return None
+        if not names or (names[0] == prefix and len(names) == 1):
+            return None
+        return value + names[0][len(prefix) :]
+
+
+class FolderTree(DirectoryTree):
+    def filter_paths(self, paths):
+        return [p for p in paths if p.is_dir() and not p.name.startswith(".")]
+
+
+class FolderPicker(ModalScreen[Path | None]):
+    """Browse for a folder. Returns the chosen path."""
+
+    DEFAULT_CSS = """
+    FolderPicker #folder-dialog { height: 30; }
+    FolderPicker FolderTree { height: 1fr; }
+    FolderPicker #folder-chosen { margin-top: 1; }
+    """
+
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel"),
+        Binding("ctrl+s,c", "choose", "Choose"),
+        Binding("backspace", "up", "Parent folder"),
+    ]
+
+    def __init__(self, start: Path) -> None:
+        super().__init__()
+        start = start.expanduser()
+        self.start = start if start.is_dir() else Path.home()
+        self.chosen = self.start
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="dialog", id="folder-dialog"):
+            yield Label("Choose the folder that holds your projects", classes="title")
+            yield FolderTree(self.start)
+            yield Static(id="folder-chosen")
+            yield Label(
+                "[dim]↑/↓ move  →/enter open  backspace: parent folder  "
+                "c: choose  esc: cancel[/dim]"
+            )
+
+    def on_mount(self) -> None:
+        self.show(self.start)
+        self.query_one(FolderTree).focus()
+
+    def show(self, path: Path) -> None:
+        self.chosen = path
+        self.query_one("#folder-chosen", Static).update(
+            Text.assemble("choose  ", (config.tilde(path), "bold"))
+        )
+
+    @on(DirectoryTree.NodeHighlighted)
+    def highlighted(self, event: DirectoryTree.NodeHighlighted) -> None:
+        if event.node.data is not None:
+            self.show(Path(event.node.data.path))
+
+    def action_up(self) -> None:
+        tree = self.query_one(FolderTree)
+        parent = Path(tree.path).parent
+        tree.path = parent
+        self.show(parent)
+
+    def action_choose(self) -> None:
+        self.dismiss(self.chosen)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
+class ModelEditor(ModalScreen[ModelSpec | None]):
+    """Add or edit one model of the matrix."""
+
+    DEFAULT_CSS = """
+    ModelEditor .row { height: auto; }
+    ModelEditor .row > Label.field { width: 12; padding-top: 1; }
+    ModelEditor .row > Input, ModelEditor .row > Select { width: 1fr; }
+    ModelEditor .hint { margin-left: 12; color: $text-muted; height: auto; margin-bottom: 1; }
+    ModelEditor #m-preview { height: auto; }
+    ModelEditor .buttons { height: auto; margin-top: 1; }
+    ModelEditor .buttons > Button { margin-right: 1; }
+    """
+
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel"),
+        Binding("ctrl+s", "save", "Save"),
+    ]
+
+    def __init__(
+        self,
+        model: ModelSpec | None,
+        kinds: list[str],
+        taken: set[str],
+        efforts: dict[str, list[str]],
+    ) -> None:
+        super().__init__()
+        self.model = model
+        self.kinds = sorted(set(kinds or AGENT_KINDS) | ({model.tool} if model else set()))
+        self.taken = taken
+        self.efforts = efforts
+
+    def compose(self) -> ComposeResult:
+        m = self.model
+        with Vertical(classes="dialog"):
+            yield Label("Edit model" if m else "Add a model", classes="title")
+            with Horizontal(classes="row"):
+                yield Label("Key", classes="field")
+                yield Input(m.key if m else "", placeholder="opus", id="m-key")
+            yield Static("what you type: corral tab KEY/high", classes="hint")
+            with Horizontal(classes="row"):
+                yield Label("Tab name", classes="field")
+                yield Input(m.display if m else "", placeholder="Opus", id="m-display")
+            with Horizontal(classes="row"):
+                yield Label("Agent", classes="field")
+                yield Select(
+                    [(k, k) for k in self.kinds],
+                    value=m.tool if m else ("claude" if "claude" in self.kinds else self.kinds[0]),
+                    allow_blank=False,
+                    id="m-tool",
+                )
+            yield Static("the herdr agent kind, i.e. the program started", classes="hint")
+            with Horizontal(classes="row"):
+                yield Label("Arguments", classes="field")
+                yield Input(
+                    join_args(m.args) if m else "",
+                    placeholder="--model opus --effort {effort}",
+                    id="m-args",
+                )
+            yield Static("passed to the agent; {effort} becomes the effort level", classes="hint")
+            yield Static(id="m-preview")
+            yield Static(id="m-error", classes="error")
+            with Horizontal(classes="buttons"):
+                yield Button("Save", variant="primary", id="m-save")
+                yield Button("Cancel", id="m-cancel")
+
+    def on_mount(self) -> None:
+        self.query_one("#m-key" if not self.model else "#m-display", Input).focus()
+        self.update_preview()
+
+    @on(Input.Changed)
+    @on(Select.Changed)
+    def update_preview(self) -> None:
+        spec, error = self.build()
+        preview = self.query_one("#m-preview", Static)
+        if spec:
+            levels = self.efforts.get(spec.tool) or config.FALLBACK_EFFORTS
+            effort = "high" if "high" in levels else levels[-1]
+            argv = shlex.join([spec.tool, *spec.args_for(effort)])
+            preview.update(
+                Text.assemble(
+                    "e.g. tab ",
+                    (labels.tab_label(spec.display, effort), "bold"),
+                    "  runs  ",
+                    (argv, "cyan"),
+                )
+            )
+        else:
+            preview.update("")
+        self.query_one("#m-error", Static).update(Text(error or "", style="red"))
+
+    def build(self) -> tuple[ModelSpec | None, str]:
+        key = self.query_one("#m-key", Input).value.strip()
+        display = self.query_one("#m-display", Input).value.strip()
+        tool = self.query_one("#m-tool", Select).value
+        if not key:
+            return None, "a key is required"
+        if any(c in key for c in " /•"):
+            return None, "the key can't contain spaces, / or •"
+        if key in self.taken:
+            return None, f"another model already has the key '{key}'"
+        if not display:
+            return None, "a tab name is required"
+        if any(c in display for c in "•/"):
+            return None, "the tab name can't contain / or •"
+        try:
+            args = tuple(shlex.split(self.query_one("#m-args", Input).value))
+        except ValueError as e:
+            return None, f"arguments: {e}"
+        return ModelSpec(key, str(tool), display, args), ""
+
+    @on(Button.Pressed, "#m-save")
+    def action_save(self) -> None:
+        spec, error = self.build()
+        if spec:
+            self.dismiss(spec)
+        else:
+            self.notify(error, severity="error")
+
+    @on(Button.Pressed, "#m-cancel")
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
+class SettingsScreen(Screen[Config | None]):
+    """Edit the config file. Dismisses with the saved file's Config, or None
+    when cancelled."""
+
+    BINDINGS = [
+        Binding("ctrl+s", "save", "Save"),
+        Binding("escape", "cancel", "Cancel"),
+    ]
+
+    DEFAULT_CSS = """
+    SettingsScreen { layout: vertical; }
+    SettingsScreen #settings-title { padding: 0 1; background: $panel; width: 1fr; }
+    SettingsScreen TabbedContent { height: 1fr; }
+    SettingsScreen TabPane { padding: 1 2; }
+    SettingsScreen .row { height: auto; margin-top: 1; }
+    SettingsScreen .row > Label.field { width: 18; padding-top: 1; }
+    SettingsScreen .row > Input { width: 1fr; }
+    SettingsScreen .row > Input.short { width: 14; }
+    SettingsScreen .row > Button { margin-left: 1; }
+    SettingsScreen .status { margin-left: 18; height: auto; }
+    SettingsScreen .hint { color: $text-muted; margin-left: 18; height: auto; }
+    SettingsScreen .note { color: $text-muted; height: auto; margin-bottom: 1; }
+    SettingsScreen .warning { color: $warning; height: auto; margin-top: 1; }
+    SettingsScreen .section { margin-top: 1; text-style: bold; }
+    SettingsScreen #default-agents { height: auto; max-height: 12; margin-top: 1; }
+    SettingsScreen #model-table { height: auto; max-height: 14; margin-top: 1; }
+    SettingsScreen .buttons { height: auto; margin-top: 1; }
+    SettingsScreen .buttons > Button { margin-right: 1; }
+    SettingsScreen #util-diagram { margin-left: 18; margin-top: 1; color: $text-muted; }
+    SettingsScreen #bottom { height: auto; padding: 0 1; border-top: solid $panel; }
+    SettingsScreen #file { width: 1fr; padding-top: 1; color: $text-muted; }
+    SettingsScreen #bottom Button { margin-left: 1; }
+    """
+
+    def __init__(
+        self, path: Path, kinds: list[str] | None = None, root_override: str | None = None
+    ) -> None:
+        super().__init__()
+        self.path = path
+        self.kinds = kinds or []
+        self.root_override = root_override
+        self.orig = config.load_file(path)
+        self.models: list[ModelSpec] = list(self.orig.models)
+        self.efforts: dict[str, list[str]] = {k: list(v) for k, v in self.orig.efforts.items()}
+        self.default_agents: list[str] = list(self.orig.default_agents)
+        self.prune_extra_only = self.orig.prune >= DEFAULT_PRUNE
+
+    # layout
+
+    def compose(self) -> ComposeResult:
+        c = self.orig
+        yield Static("[b]Settings[/b]", id="settings-title")
+        with TabbedContent(id="tabs"):
+            with TabPane("General", id="tab-general"):
+                yield Static(
+                    "corral shows every folder in the project root, and git repos nested "
+                    "below them, as a project.",
+                    classes="note",
+                )
+                with Horizontal(classes="row"):
+                    yield Label("Project root", classes="field")
+                    yield Input(config.tilde(c.root), id="root", suggester=PathSuggester())
+                    yield Button("Browse…", id="browse")
+                yield Static(id="root-status", classes="status")
+                if self.root_override:
+                    yield Static(
+                        f"This session uses {self.root_override} (--root or $CORRAL_ROOT), "
+                        "which overrides this setting.",
+                        classes="warning",
+                    )
+                with Horizontal(classes="row"):
+                    yield Label("Scan depth", classes="field")
+                    yield Input(str(c.scan_depth), type="integer", id="scan-depth", classes="short")
+                yield Static(
+                    "how many levels below each project to look for nested git repos",
+                    classes="hint",
+                )
+            with TabPane("Agents", id="tab-agents"):
+                yield Static(
+                    "The agent tabs a new workspace gets, in order. (Pressing a in the "
+                    "project list adds any other agent to a workspace.)",
+                    classes="note",
+                )
+                yield OptionList(id="default-agents")
+                with Horizontal(classes="buttons"):
+                    yield Button("Add…", id="agent-add")
+                    yield Button("Remove", id="agent-remove")
+                    yield Button("Move up", id="agent-up")
+                    yield Button("Move down", id="agent-down")
+                with Horizontal(classes="row"):
+                    yield Label("Start timeout", classes="field")
+                    yield Input(
+                        _seconds(c.agent_timeout_ms), type="number", id="timeout", classes="short"
+                    )
+                yield Static(
+                    "seconds to wait for a new agent to be ready (max 300)", classes="hint"
+                )
+            with TabPane("Utility tab", id="tab-utility"):
+                yield Static(
+                    "The first tab of every workspace: one pane on top, two below. Give each "
+                    "pane a command to run, or leave it empty for a plain shell.",
+                    classes="note",
+                )
+                with Horizontal(classes="row"):
+                    yield Label("Utility tab", classes="field")
+                    yield Switch(c.utility.enabled, id="util-enabled")
+                for key, title in UTILITY_PANES:
+                    with Horizontal(classes="row"):
+                        yield Label(title, classes="field")
+                        yield Input(
+                            getattr(c.utility, key),
+                            placeholder="(plain shell)",
+                            id=f"util-{key}",
+                        )
+                    yield Static(id=f"util-{key}-status", classes="status")
+                yield Static(id="util-diagram")
+            with TabPane("Models", id="tab-models"):
+                yield Static(
+                    "The models you can open agent tabs with. Tabs are named "
+                    "<tab name>•<effort>, e.g. Opus•high.",
+                    classes="note",
+                )
+                yield DataTable(id="model-table", cursor_type="row", zebra_stripes=True)
+                with Horizontal(classes="buttons"):
+                    yield Button("Add…", id="model-add")
+                    yield Button("Edit…", id="model-edit")
+                    yield Button("Delete", id="model-delete")
+                    yield Button("Move up", id="model-up")
+                    yield Button("Move down", id="model-down")
+                yield Static("Effort levels per agent", classes="section")
+                yield Static("offered when you add an agent tab, lowest first", classes="note")
+                yield Vertical(id="effort-rows")
+            with TabPane("Advanced", id="tab-advanced"):
+                with Horizontal(classes="row"):
+                    yield Label("Refresh every", classes="field")
+                    yield Input(
+                        f"{c.refresh_seconds:g}", type="number", id="refresh", classes="short"
+                    )
+                yield Static("seconds between the TUI's herdr status updates", classes="hint")
+                with Horizontal(classes="row"):
+                    if self.prune_extra_only:
+                        yield Label("Also skip", classes="field")
+                        yield Input(
+                            " ".join(sorted(c.prune - DEFAULT_PRUNE)),
+                            placeholder="e.g. third_party generated",
+                            id="prune",
+                        )
+                    else:  # the file replaces the built-in list
+                        yield Label("Skip folders", classes="field")
+                        yield Input(" ".join(sorted(c.prune)), id="prune")
+                yield Static(
+                    "folder names never searched for projects. Always skipped: hidden "
+                    + (
+                        "folders, " + ", ".join(sorted(DEFAULT_PRUNE))
+                        if self.prune_extra_only
+                        else "folders"
+                    ),
+                    classes="hint",
+                )
+        with Horizontal(id="bottom"):
+            where = config.tilde(self.path)
+            yield Static(
+                f"saved to {where}" + ("" if self.orig.path else " (a new file)"), id="file"
+            )
+            yield Button("Save", variant="primary", id="save")
+            yield Button("Cancel", id="cancel")
+        yield Footer()
+
+    def on_mount(self) -> None:
+        table = self.query_one("#model-table", DataTable)
+        table.add_columns("Key", "Tab name", "Agent", "Arguments")
+        self.render_models()
+        self.render_agents()
+        for key, _ in UTILITY_PANES:
+            self.update_util_status(key)
+        self.util_toggled()
+        self.scan_root()
+        self.baseline = config.to_data(self.collect())
+
+    # general
+
+    @on(Input.Changed, "#root")
+    @on(Input.Changed, "#scan-depth")
+    def root_changed(self) -> None:
+        self.scan_root()
+
+    @work(exclusive=True, group="settings-scan")
+    async def scan_root(self) -> None:
+        await asyncio.sleep(0.3)  # debounce typing
+        status = self.query_one("#root-status", Static)
+        root = Path(self.query_one("#root", Input).value.strip() or "~").expanduser()
+        if not root.is_dir():
+            status.update(Text("✗ no such folder", style="red"))
+            return
+        try:
+            depth = int(self.query_one("#scan-depth", Input).value)
+        except ValueError:
+            depth = self.orig.scan_depth
+        probe = Config(root=root, scan_depth=depth, prune=self.orig.prune)
+        status.update(Text("scanning…", style="dim"))
+        tree = await asyncio.to_thread(projects.scan, probe)
+        n = len(tree.nodes)
+        repos = sum(1 for p in tree.nodes.values() if p.is_repo)
+        status.update(
+            Text(
+                f"✓ {n} project{'s' if n != 1 else ''}, {repos} of them git repos",
+                style="green" if n else "yellow",
+            )
+        )
+
+    @on(Button.Pressed, "#browse")
+    def browse(self) -> None:
+        current = Path(self.query_one("#root", Input).value.strip() or "~")
+
+        def chosen(path: Path | None) -> None:
+            if path:
+                box = self.query_one("#root", Input)
+                box.value = config.tilde(path)
+                box.focus()
+
+        self.app.push_screen(FolderPicker(current), chosen)
+
+    # agents
+
+    def draft_config(self) -> Config:
+        """The model matrix being edited, for the agent picker."""
+        return Config(
+            models=tuple(self.models),
+            efforts=dict(self.efforts),
+            default_agents=tuple(self.default_agents),
+        )
+
+    def spec_label(self, spec: str) -> Text:
+        key, effort = ops.parse_spec(spec)
+        model = next((m for m in self.models if m.key == key), None)
+        if not model:
+            return Text(f"{spec}  (unknown model)", style="red")
+        return Text.assemble(
+            (labels.tab_label(model.display, effort), "bold"), (f"  {spec}", "dim")
+        )
+
+    def render_agents(self, highlight: int | None = None) -> None:
+        box = self.query_one("#default-agents", OptionList)
+        box.clear_options()
+        if not self.default_agents:
+            box.add_option(
+                Option(
+                    Text("none -- new workspaces get only the utility tab", style="dim"),
+                    id="none",
+                    disabled=True,
+                )
+            )
+            return
+        box.add_options(
+            [Option(self.spec_label(s), id=f"a{i}") for i, s in enumerate(self.default_agents)]
+        )
+        if highlight is not None and self.default_agents:
+            box.highlighted = max(0, min(highlight, len(self.default_agents) - 1))
+
+    def agent_index(self) -> int | None:
+        i = self.query_one("#default-agents", OptionList).highlighted
+        return i if i is not None and i < len(self.default_agents) else None
+
+    @on(Button.Pressed, "#agent-add")
+    def agent_add(self) -> None:
+        def picked(spec: str | None) -> None:
+            if spec:
+                self.default_agents.append(spec)
+                self.render_agents(len(self.default_agents) - 1)
+
+        self.app.push_screen(
+            AgentPicker(self.draft_config(), title="Add a default agent tab"), picked
+        )
+
+    @on(Button.Pressed, "#agent-remove")
+    def agent_remove(self) -> None:
+        i = self.agent_index()
+        if i is not None:
+            del self.default_agents[i]
+            self.render_agents(i)
+
+    @on(Button.Pressed, "#agent-up")
+    @on(Button.Pressed, "#agent-down")
+    def agent_move(self, event: Button.Pressed) -> None:
+        i = self.agent_index()
+        j = (i - 1 if event.button.id == "agent-up" else i + 1) if i is not None else None
+        if i is None or not 0 <= j < len(self.default_agents):
+            return
+        a = self.default_agents
+        a[i], a[j] = a[j], a[i]
+        self.render_agents(j)
+
+    # utility
+
+    @on(Input.Changed, "#util-top")
+    @on(Input.Changed, "#util-bottom_left")
+    @on(Input.Changed, "#util-bottom_right")
+    def util_changed(self, event: Input.Changed) -> None:
+        self.update_util_status(event.input.id.removeprefix("util-"))
+        self.update_util_diagram()
+
+    @on(Switch.Changed, "#util-enabled")
+    def util_toggled(self) -> None:
+        on_ = self.query_one("#util-enabled", Switch).value
+        for key, _ in UTILITY_PANES:
+            self.query_one(f"#util-{key}", Input).disabled = not on_
+        self.update_util_diagram()
+
+    def update_util_status(self, key: str) -> None:
+        cmd = self.query_one(f"#util-{key}", Input).value
+        self.query_one(f"#util-{key}-status", Static).update(command_status(cmd))
+
+    def update_util_diagram(self) -> None:
+        diagram = self.query_one("#util-diagram", Static)
+        if not self.query_one("#util-enabled", Switch).value:
+            diagram.update("no utility tab: a workspace starts with its agent tabs")
+            return
+        top, left, right = (
+            (self.query_one(f"#util-{k}", Input).value.strip() or "shell")[:20]
+            for k, _ in UTILITY_PANES
+        )
+        w = 44
+        half = w // 2 - 1
+        diagram.update(
+            "┌" + "─" * w + "┐\n"
+            f"│{top:^{w}}│\n"
+            "├" + "─" * half + "┬" + "─" * (w - half - 1) + "┤\n"
+            f"│{left:^{half}}│{right:^{w - half - 1}}│\n"
+            "└" + "─" * half + "┴" + "─" * (w - half - 1) + "┘"
+        )
+
+    # models
+
+    def render_models(self, highlight: int | None = None) -> None:
+        table = self.query_one("#model-table", DataTable)
+        table.clear()
+        for m in self.models:
+            table.add_row(m.key, m.display, m.tool, join_args(m.args), key=m.key)
+        if highlight is not None and self.models:
+            table.move_cursor(row=max(0, min(highlight, len(self.models) - 1)))
+        self.render_effort_rows()
+
+    def render_effort_rows(self) -> None:
+        """One effort-levels input per agent kind the models use."""
+        self.save_effort_rows()
+        box = self.query_one("#effort-rows", Vertical)
+        box.remove_children()
+        tools = list(dict.fromkeys(m.tool for m in self.models))
+        rows = []
+        for tool in tools:
+            levels = self.efforts.get(tool) or config.FALLBACK_EFFORTS
+            rows.append(
+                Horizontal(
+                    Label(tool, classes="field"),
+                    Input(" ".join(levels), name=tool, classes="effort"),
+                    classes="row",
+                )
+            )
+        box.mount_all(rows)
+
+    def save_effort_rows(self) -> None:
+        for box in self.query("Input.effort"):
+            tool = box.name
+            levels = _split_list(box.value)
+            if levels:
+                self.efforts[tool] = levels
+
+    def model_index(self) -> int | None:
+        table = self.query_one("#model-table", DataTable)
+        return table.cursor_row if self.models and table.row_count else None
+
+    @on(Button.Pressed, "#model-add")
+    def model_add(self) -> None:
+        self.save_effort_rows()
+
+        def done(spec: ModelSpec | None) -> None:
+            if spec:
+                self.models.append(spec)
+                self.render_models(len(self.models) - 1)
+
+        taken = {m.key for m in self.models}
+        self.app.push_screen(ModelEditor(None, self.kinds, taken, self.efforts), done)
+
+    @on(Button.Pressed, "#model-edit")
+    @on(DataTable.RowSelected, "#model-table")
+    def model_edit(self) -> None:
+        i = self.model_index()
+        if i is None:
+            return
+        self.save_effort_rows()
+        old = self.models[i]
+
+        def done(spec: ModelSpec | None) -> None:
+            if not spec:
+                return
+            self.models[i] = spec
+            if spec.key != old.key:  # keep default agents pointing at it
+                self.default_agents = [
+                    f"{spec.key}/{e}" if k == old.key else s
+                    for s in self.default_agents
+                    for k, e in [ops.parse_spec(s)]
+                ]
+            self.render_models(i)
+            self.render_agents()
+
+        taken = {m.key for m in self.models} - {old.key}
+        self.app.push_screen(ModelEditor(old, self.kinds, taken, self.efforts), done)
+
+    @on(Button.Pressed, "#model-delete")
+    def model_delete(self) -> None:
+        i = self.model_index()
+        if i is None:
+            return
+        if len(self.models) == 1:
+            self.notify("keep at least one model", severity="error")
+            return
+        gone = self.models.pop(i)
+        before = len(self.default_agents)
+        self.default_agents = [s for s in self.default_agents if ops.parse_spec(s)[0] != gone.key]
+        if len(self.default_agents) != before:
+            self.notify(f"{gone.display} was also removed from the default agent tabs")
+        self.render_models(i)
+        self.render_agents()
+
+    @on(Button.Pressed, "#model-up")
+    @on(Button.Pressed, "#model-down")
+    def model_move(self, event: Button.Pressed) -> None:
+        i = self.model_index()
+        j = (i - 1 if event.button.id == "model-up" else i + 1) if i is not None else None
+        if i is None or not 0 <= j < len(self.models):
+            return
+        m = self.models
+        m[i], m[j] = m[j], m[i]
+        self.render_models(j)
+
+    # save / cancel
+
+    def collect(self) -> Config:
+        """The edited settings as a Config; ConfigError names what's wrong."""
+
+        def number(widget_id: str, what: str, kind=float):
+            text = self.query_one(f"#{widget_id}", Input).value.strip()
+            try:
+                return kind(text)
+            except ValueError:
+                raise ConfigError(f"{what}: '{text}' is not a number") from None
+
+        root_text = self.query_one("#root", Input).value.strip()
+        if not root_text:
+            raise ConfigError("project root: enter a folder")
+        depth = number("scan-depth", "scan depth", int)
+        if not 0 <= depth <= 10:
+            raise ConfigError("scan depth: use 0 to 10")
+        timeout = number("timeout", "start timeout")
+        if not 1 <= timeout <= 300:
+            raise ConfigError("start timeout: use 1 to 300 seconds")
+        refresh = number("refresh", "refresh interval")
+        if not 0.5 <= refresh <= 3600:
+            raise ConfigError("refresh interval: use 0.5 to 3600 seconds")
+        self.save_effort_rows()
+        used = {m.tool for m in self.models}
+        efforts = {
+            t: v for t, v in self.efforts.items() if t in used or t in config.DEFAULT_EFFORTS
+        }
+        return replace(
+            self.orig,
+            root=Path(root_text).expanduser(),
+            scan_depth=depth,
+            prune=frozenset(_split_list(self.query_one("#prune", Input).value))
+            | (DEFAULT_PRUNE if self.prune_extra_only else frozenset()),
+            default_agents=tuple(self.default_agents),
+            refresh_seconds=refresh,
+            agent_timeout_ms=int(timeout * 1000),
+            utility=Utility(
+                enabled=self.query_one("#util-enabled", Switch).value,
+                **{k: self.query_one(f"#util-{k}", Input).value.strip() for k, _ in UTILITY_PANES},
+            ),
+            models=tuple(self.models),
+            efforts=efforts,
+        )
+
+    def dirty(self) -> bool:
+        try:
+            return config.to_data(self.collect()) != self.baseline
+        except ConfigError:
+            return True
+
+    @on(Button.Pressed, "#save")
+    def action_save(self) -> None:
+        try:
+            cfg = self.collect()
+            if not cfg.root.is_dir():
+                raise ConfigError(f"project root: {config.tilde(cfg.root)} is not a folder")
+            config.save(cfg, self.path)
+            saved = config.load_file(self.path)
+        except ConfigError as e:
+            self.notify(str(e), title="Not saved", severity="error", timeout=8)
+            return
+        self.dismiss(saved)
+
+    @on(Button.Pressed, "#cancel")
+    @work
+    async def action_cancel(self) -> None:
+        if self.dirty() and not await self.app.push_screen_wait(
+            Confirm("Discard your changes?", "The settings file is left as it was.")
+        ):
+            return
+        self.dismiss(None)

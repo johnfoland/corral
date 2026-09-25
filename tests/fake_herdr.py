@@ -42,6 +42,9 @@ class FakeHerdr:
     def available(self) -> bool:
         return True
 
+    def agent_kinds(self) -> list[str]:
+        return ["claude", "codex", "gemini"]
+
     def snapshot(self) -> Snapshot:
         return Snapshot(
             [

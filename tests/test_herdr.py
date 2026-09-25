@@ -147,3 +147,15 @@ def test_fake_errors_match_real_ones(stub, herdr):
         herdr.rename_tab("t9", "x")
     assert (fake.value.code, fake.value.message) == (real.value.code, real.value.message)
     assert str(fail("tab_not_found", "tab t9 not found")) == str(real.value)
+
+
+def test_agent_kinds_are_read_from_help(stub):
+    help_text = (
+        "Options:\n      --kind <KIND>\n          Supported agent kind\n\n"
+        "          [possible values: pi, claude, codex, gemini]\n\n      --pane <ID>\n"
+    )
+    stub({"stdout": help_text})
+    assert Herdr().agent_kinds() == ["pi", "claude", "codex", "gemini"]
+    stub({"stdout": "no kinds here"})
+    assert "claude" in Herdr().agent_kinds()  # the built-in fallback
+    assert "claude" in Herdr("/no/such/herdr").agent_kinds()
