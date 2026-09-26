@@ -1,10 +1,12 @@
 """Projects under the root, and which herdr workspace belongs to which.
 
 A project is every top-level directory of the root, plus git repos nested up
-to `scan_depth` levels below one and the plain folders that lead to them.
+to `scan_depth` levels below one and the plain folders that lead to them. The
+home directory is a project too, labelled "~" and listed first.
 
 A project's workspace label is its path relative to the root ("courses",
-"cruzainet/api"); a directory outside the root uses its basename. An existing
+"cruzainet/api"); the home directory is "~" and any other directory outside
+the root uses its basename. An existing
 workspace also matches a nested project when it carries the bare basename
 and one of its panes sits in that directory -- so a workspace made before
 nested labels existed is found rather than duplicated.
@@ -31,6 +33,7 @@ class Project:
     children: list[str] = field(default_factory=list)
     repos_below: int = 0
     branch: str = ""
+    is_home: bool = False
 
     @property
     def name(self) -> str:
@@ -126,6 +129,17 @@ def scan(cfg: Config) -> Tree:
     root = cfg.root
     nodes: dict[str, Project] = {}
     tops: list[str] = []
+    home = Path.home()
+    if label_for(home, root) == HOME:  # else home is inside the root, listed there
+        nodes[HOME] = Project(
+            rel=HOME,
+            path=home.resolve(),
+            depth=0,
+            is_repo=(home / ".git").exists(),
+            branch=git_branch(home),
+            is_home=True,
+        )
+        tops.append(HOME)
     for e in _subdirs(root, cfg.prune, follow_links=True):
         path = Path(e.path)
         below = _nested(path, e.name, 1, cfg.scan_depth, cfg.prune)
@@ -148,25 +162,32 @@ def scan(cfg: Config) -> Tree:
 # --- labels and matching ---------------------------------------------------
 
 
+HOME = "~"  # the home directory's label
+
+
 def label_for(path: Path, root: Path) -> str:
-    """Relative path under the root, else the basename."""
+    """Relative path under the root, else "~" for the home directory, else
+    the basename."""
     path, root = path.resolve(), root.expanduser().resolve()
     try:
-        rel = path.relative_to(root)
+        rel = str(path.relative_to(root))
     except ValueError:
-        return path.name
-    return str(rel) if str(rel) != "." else path.name
+        rel = "."
+    if rel != ".":
+        return rel
+    return HOME if path == Path.home().resolve() else path.name
 
 
 def find_workspace(snap: Snapshot, label: str, path: Path | None = None) -> Workspace | None:
-    """The first workspace labelled `label`; failing that, for a nested label,
-    one labelled with its basename that has a pane in `path`."""
+    """The first workspace labelled `label`; failing that, for a nested label
+    or "~", one labelled with its basename that has a pane in `path`."""
     for w in snap.workspaces:
         if w.label == label:
             return w
-    if path is None or "/" not in label:
+    if path is None or not ("/" in label or label == HOME):
         return None
-    base, want = label.rsplit("/", 1)[-1], str(path.resolve())
+    base = path.resolve().name if label == HOME else label.rsplit("/", 1)[-1]
+    want = str(path.resolve())
     for w in snap.workspaces:
         if w.label == base and any(p.cwd == want for p in snap.panes if p.workspace_id == w.id):
             return w

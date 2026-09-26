@@ -22,6 +22,12 @@ def test_up_builds_utility_and_default_agent(herdr, cfg, root):
     assert start[4] == ("--model", "sonnet", "--effort", "medium")
 
 
+def test_up_home_is_labelled_tilde(herdr, cfg, home):
+    res = ops.up(herdr, cfg, home)
+    assert res.label == "~"
+    assert labels_in(herdr, res.workspace)[0] == "~"
+
+
 def test_up_existing_focuses_and_fill_is_idempotent(herdr, cfg, root):
     first = ops.up(herdr, cfg, root / "courses")
     again = ops.up(herdr, cfg, root / "courses")

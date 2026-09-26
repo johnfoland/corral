@@ -298,7 +298,8 @@ class CorralApp(App):
     def rows(self) -> list[tuple[Project, str]]:
         keep = self.visible_set()
         tops = [t for t in self.ptree.tops if keep is None or t in keep]
-        tops.sort(key=lambda t: (not self.subtree_open(t), t.lower()))
+        # ~ first, then projects with open workspaces
+        tops.sort(key=lambda t: (not self.node(t).is_home, not self.subtree_open(t), t.lower()))
         out: list[tuple[Project, str]] = []
 
         def walk(rel: str, guides: str, last: bool) -> None:
@@ -337,7 +338,7 @@ class CorralApp(App):
             elif p.depth == 0:
                 name.append("  ")
             style = "bold" if s.ws else ("" if p.is_repo else "italic")
-            name.append(p.name + ("" if p.is_repo else "/"), style=style)
+            name.append(p.name + ("" if p.is_repo or p.is_home else "/"), style=style)
             if folded:
                 name.append(
                     f" · {p.repos_below} repo{'s' if p.repos_below != 1 else ''}", style="dim"
@@ -444,7 +445,9 @@ class CorralApp(App):
         t.append(f"{p.rel}\n", style="bold")
         t.append(f"{str(p.path).replace(home, '~', 1)}\n\n", style="dim")
         t.append("kind     ")
-        if p.is_repo:
+        if p.is_home:
+            t.append("home directory\n")
+        elif p.is_repo:
             parent = self.ptree.nodes.get(p.parent)
             nested = f", nested in the {parent.name} repo" if parent and parent.is_repo else ""
             t.append(f"git repo{nested}\n")

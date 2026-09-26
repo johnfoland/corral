@@ -5,7 +5,7 @@ from corral import projects
 
 def test_scan_finds_nested_repos_and_leading_folders(cfg):
     tree = projects.scan(cfg)
-    assert tree.tops == ["Archive", "courses", "cruzainet", "cSolveWordle", "MCPs", "scratch"]
+    assert tree.tops == ["~", "Archive", "courses", "cruzainet", "cSolveWordle", "MCPs", "scratch"]
     n = tree.nodes
     assert n["cruzainet"].children == ["cruzainet/api", "cruzainet/web-app"]
     assert n["cruzainet"].repos_below == 2
@@ -30,6 +30,37 @@ def test_label_for(cfg, root, tmp_path):
     assert projects.label_for(root / "courses", root) == "courses"
     assert projects.label_for(root / "cruzainet" / "api", root) == "cruzainet/api"
     assert projects.label_for(tmp_path / "elsewhere", root) == "elsewhere"
+    assert projects.label_for(tmp_path / "home", root) == "~"
+    assert projects.label_for(tmp_path / "home", tmp_path / "home") == "~"
+
+
+def test_home_is_listed_first(cfg, home):
+    n = projects.scan(cfg).nodes
+    assert next(iter(n)) == "~"
+    assert n["~"].path == home.resolve()
+    assert n["~"].is_home
+    assert n["~"].children == []
+
+
+def test_home_as_root_lists_its_folders_under_tilde(cfg, home):
+    (home / "Code").mkdir()
+    cfg.root = home
+    tree = projects.scan(cfg)
+    assert tree.tops == ["~", "Code"]
+
+
+def test_home_inside_the_root_is_not_listed_twice(cfg, tmp_path):
+    cfg.root = tmp_path
+    tree = projects.scan(cfg)
+    assert "~" not in tree.nodes
+    assert "home" in tree.tops
+
+
+def test_find_workspace_home_by_legacy_basename(herdr, home):
+    ws, _, _ = herdr.create_workspace(str(home.resolve()), "home")
+    found = projects.find_workspace(herdr.snapshot(), "~", home)
+    assert found
+    assert found.id == ws
 
 
 def test_find_workspace_by_label_then_legacy_basename(herdr, root):

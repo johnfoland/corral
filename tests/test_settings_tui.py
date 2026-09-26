@@ -65,7 +65,7 @@ async def test_save_applies_root_and_utility(app, cfg_path, tmp_path):
         assert not isinstance(app.screen, SettingsScreen)
         assert app.cfg.root == other
         assert app.cfg.utility.top == "htop"
-        assert list(app.ptree.nodes) == ["alpha"]  # re-scanned the new root
+        assert list(app.ptree.nodes) == ["~", "alpha"]  # re-scanned the new root
     data = saved(cfg_path)
     assert data["root"] == str(other)
     assert data["utility"]["top"] == "htop"

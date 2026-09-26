@@ -62,6 +62,9 @@ its path relative to the root, so two nested repos that share a name don't
 collide. Hidden directories and dependency/build folders (`node_modules`,
 `vendor`, `dist`, …) are skipped.
 
+Your home directory is a project too: it heads the list as `~`, and its
+workspace is labelled `~` (quote it on the command line: `corral close '~'`).
+
 ### TUI keys
 
 | Key | Action |

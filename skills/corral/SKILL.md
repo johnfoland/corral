@@ -39,7 +39,9 @@ or `exited` for an agent tab whose agent has gone. `other_workspaces` lists
 workspaces that belong to no project under the root.
 
 Project labels are paths relative to the root: a nested repo is
-`cruzainet/api`. Refer to projects by path when running `up`; `ls` gives you
+`cruzainet/api`. The home directory is always a project, listed first and
+labelled `~` (`corral up ~`; quote the label, `'~'`, when you pass it to
+`close`). Refer to projects by path when running `up`; `ls` gives you
 the path.
 
 ## Opening a project
