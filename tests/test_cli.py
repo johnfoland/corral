@@ -62,7 +62,7 @@ def test_global_options_either_side_of_the_command(run, root, tmp_path, capsys, 
     assert run(*argv) == 0
     out = json.loads(capsys.readouterr().out)  # --json honoured
     assert out["root"] == str(other)  # --root honoured, not $CORRAL_ROOT
-    assert [p["project"] for p in out["projects"]] == ["solo"]
+    assert [p["project"] for p in out["projects"]] == ["~", "solo"]
     assert run(*(["--config", str(cfg), "config", "show"])) == 0
     assert json.loads(capsys.readouterr().out)["file"] == str(cfg)
 

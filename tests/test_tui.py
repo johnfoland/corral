@@ -20,7 +20,7 @@ async def test_tree_folds_and_open_builds_nested_workspace(herdr, cfg):
     app = CorralApp(cfg, herdr)
     async with app.run_test(size=(150, 40)) as pilot:
         await settle(pilot, app)
-        assert rows(app)[:3] == ["Archive", "courses", "cruzainet"]
+        assert rows(app)[:4] == ["~", "Archive", "courses", "cruzainet"]
         app.move_to("cruzainet")
         await pilot.press("right")
         assert "cruzainet/api" in rows(app)
@@ -35,6 +35,20 @@ async def test_tree_folds_and_open_builds_nested_workspace(herdr, cfg):
         assert "cruzainet/api" not in rows(app)
         await pilot.press("space")  # space toggles the fold
         assert "cruzainet/api" in rows(app)
+
+
+async def test_home_stays_first_and_opens_as_tilde(herdr, cfg, root, home):
+    ops.up(herdr, cfg, root / "scratch")  # an open workspace sorts to the top...
+    app = CorralApp(cfg, herdr)
+    async with app.run_test(size=(150, 40)) as pilot:
+        await settle(pilot, app)
+        assert rows(app)[:2] == ["~", "scratch"]  # ...but below ~
+        app.move_to("~")
+        await pilot.press("o")
+        await settle(pilot, app)
+        ws = next(k for k, w in herdr.ws.items() if w["label"] == "~")
+        assert {p["cwd"] for p in herdr.panes.values() if p["ws"] == ws} == {str(home.resolve())}
+        assert app.st("~").ws is not None
 
 
 async def test_add_agent_twice_suffixes(herdr, cfg):

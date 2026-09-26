@@ -497,8 +497,9 @@ class SettingsScreen(Screen[Config | None]):
         probe = Config(root=root, scan_depth=depth, prune=self.orig.prune)
         status.update(Text("scanning…", style="dim"))
         tree = await asyncio.to_thread(projects.scan, probe)
-        n = len(tree.nodes)
-        repos = sum(1 for p in tree.nodes.values() if p.is_repo)
+        found = [p for p in tree.nodes.values() if not p.is_home]
+        n = len(found)
+        repos = sum(1 for p in found if p.is_repo)
         status.update(
             Text(
                 f"✓ {n} project{'s' if n != 1 else ''}, {repos} of them git repos",

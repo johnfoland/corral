@@ -50,6 +50,15 @@ def _no_self_ws(monkeypatch):
     monkeypatch.delenv("HERDR_WORKSPACE_ID", raising=False)
 
 
+@pytest.fixture(autouse=True)
+def home(tmp_path: Path, monkeypatch) -> Path:
+    """A scratch home directory (the "~" project), outside the root."""
+    h = tmp_path / "home"
+    h.mkdir()
+    monkeypatch.setenv("HOME", str(h))
+    return h
+
+
 def git_available() -> bool:
     try:
         return subprocess.run(["git", "--version"], capture_output=True).returncode == 0
