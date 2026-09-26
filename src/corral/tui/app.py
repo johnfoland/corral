@@ -113,7 +113,7 @@ class CorralApp(App):
     BINDINGS = [
         Binding("o", "open", "Open"),
         Binding("a", "add_agent", "Add agent"),
-        Binding("u", "utility", "Utility only"),
+        Binding("u", "utility", "Utility"),
         Binding("s", "stop", "Stop"),
         Binding("x", "close_ws", "Close WS"),
         Binding("slash", "filter", "Filter"),

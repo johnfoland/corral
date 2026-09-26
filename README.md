@@ -17,7 +17,7 @@ scripts and coding agents.
 │ ○   ├─ api                                develop       │ kind     git repo
 │ ○   ├─ web-app                            style/visual… │ nested   8 repos below
 │ ○   └─ specs                              master        │ branch   master
-└ o Open  a Add agent  u Utility only  s Stop  x Close WS  / Filter ┘
+└ o Open  a Add agent  u Utility  s Stop  x Close WS  / Filter ┘
 ```
 
 ## Install
