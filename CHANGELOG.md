@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/johnfoland/corral/compare/v0.2.0...v0.3.0) (2026-09-26)
+
+
+### Features
+
+* list the home directory as a project, first, labelled ~ ([#15](https://github.com/johnfoland/corral/issues/15)) ([68764a0](https://github.com/johnfoland/corral/commit/68764a06b3cdab1aa7f260b0e94934d0415d5092))
+
 ## [0.2.0](https://github.com/johnfoland/corral/compare/v0.1.1...v0.2.0) (2026-09-25)
 
 
